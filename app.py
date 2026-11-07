@@ -24,7 +24,7 @@ with tab1:
     user_question = st.text_input("Enter your question:")
     if st.button("Ask AI Assistant"):
         if user_question:
-            with st.spinner("Analyzing research log with AI..."):
+            with st.spinner("Connecting to Gemini AI..."):
                 try:
                     if "GEMINI_API_KEY" in st.secrets:
                         api_key = st.secrets["GEMINI_API_KEY"]
@@ -43,27 +43,27 @@ with tab1:
                     {user_question}
                     """
 
-                    # Automatic retry loop to bypass 503 traffic spikes smoothly
+                    # Using gemini-3.5-flash-lite for high stability and availability
                     response = None
-                    max_retries = 3
+                    max_retries = 4
                     for attempt in range(max_retries):
                         try:
                             response = client.models.generate_content(
-                                model='gemini-3.8-flash',
+                                model='gemini-3.5-flash-lite',
                                 contents=prompt
                             )
-                            break # Success! Exit loop
+                            break 
                         except Exception as inner_e:
                             if attempt == max_retries - 1:
-                                raise inner_e # If all retries fail, raise the error
-                            time.sleep(2 * (attempt + 1)) # Wait 2s, then 4s before retrying
+                                raise inner_e 
+                            time.sleep(3 * (attempt + 1)) # Progressive pause: 3s, 6s, 9s
 
                     if response:
                         st.success("Analysis Complete!")
                         st.write(response.text)
 
                 except Exception as e:
-                    st.error("⚠️ Google's servers are experiencing high traffic right now. Please click 'Ask AI Assistant' again in a moment!")
+                    st.error(f"⚠️ Service is busy. Please try clicking the button again in a moment. (Details: {e})")
         else:
             st.warning("Please enter a question first.")
 
