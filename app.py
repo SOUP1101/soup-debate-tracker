@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 from google import genai
@@ -27,36 +26,44 @@ with tab1:
     if st.button("Ask AI Assistant"):
         if user_question:
             with st.spinner("Analyzing research log..."):
-                api_key = os.environ.get("GEMINI_API_KEY")
-                client = genai.Client(api_key=api_key)
-                database_text = df.to_string()
+                # Safely get API key from Streamlit Secrets or environment
+                try:
+                    if "GEMINI_API_KEY" in st.secrets:
+                        api_key = st.secrets["GEMINI_API_KEY"]
+                    else:
+                        api_key = os.environ.get("GEMINI_API_KEY")
+                    
+                    client = genai.Client(api_key=api_key)
+                    database_text = df.to_string()
 
-                prompt = f"""
-                You are a helpful research assistant for a high school debate team.
-                Here is our team's current research log database:
-                {database_text}
+                    prompt = f"""
+                    You are a helpful research assistant for a high school debate team.
+                    Here is our team's current research log database:
+                    {database_text}
 
-                Answer the following question based ONLY on the database provided:
-                {user_question}
-                """
+                    Answer the following question based ONLY on the database provided:
+                    {user_question}
+                    """
 
-                response = client.models.generate_content(
-                    model='gemini-3.8-flash',
-                    contents=prompt
-                )
-                st.success("Analysis Complete!")
-                st.write(response.text)
+                    response = client.models.generate_content(
+                        model='gemini-3.8-flash',
+                        contents=prompt
+                    )
+                    st.success("Analysis Complete!")
+                    st.write(response.text)
+                except Exception as e:
+                    st.warning("⚠️ The AI server is experiencing high traffic right now (503 error). Please wait a few seconds and click 'Ask AI Assistant' again!")
         else:
             st.warning("Please enter a question first.")
 
 with tab2:
     st.subheader("Current Research Database & Filters")
-
+    
     # Topic Filter
     if not df.empty and "topic" in df.columns:
         topics = ["All"] + list(df["topic"].unique())
         selected_topic = st.selectbox("Filter by Topic:", topics)
-
+        
         if selected_topic != "All":
             filtered_df = df[df["topic"] == selected_topic]
         else:
