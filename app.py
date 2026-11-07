@@ -2,13 +2,13 @@ import streamlit as st
 import pandas as pd
 from google import genai
 import os
+import time
 
 st.title("📚 S.O.U.P. Debate Research Tracker")
 st.write("Manage team research, filter by topic, and query your database with Gemini AI!")
 
 CSV_FILE = "research_log.csv"
 
-# Load database safely
 def load_data():
     if os.path.exists(CSV_FILE):
         return pd.read_csv(CSV_FILE)
@@ -17,7 +17,6 @@ def load_data():
 
 df = load_data()
 
-# Tab layout for organized UI
 tab1, tab2, tab3 = st.tabs(["🔍 Query AI", "📋 View & Export Log", "➕ Add New Research"])
 
 with tab1:
@@ -25,8 +24,7 @@ with tab1:
     user_question = st.text_input("Enter your question:")
     if st.button("Ask AI Assistant"):
         if user_question:
-            with st.spinner("Analyzing research log..."):
-                # Safely get API key from Streamlit Secrets or environment
+            with st.spinner("Analyzing research log with AI..."):
                 try:
                     if "GEMINI_API_KEY" in st.secrets:
                         api_key = st.secrets["GEMINI_API_KEY"]
@@ -45,25 +43,35 @@ with tab1:
                     {user_question}
                     """
 
-                    response = client.models.generate_content(
-                        model='gemini-3.8-flash',
-                        contents=prompt
-                    )
-                    st.success("Analysis Complete!")
-                    st.write(response.text)
+                    # Automatic retry loop to bypass 503 traffic spikes smoothly
+                    response = None
+                    max_retries = 3
+                    for attempt in range(max_retries):
+                        try:
+                            response = client.models.generate_content(
+                                model='gemini-3.8-flash',
+                                contents=prompt
+                            )
+                            break # Success! Exit loop
+                        except Exception as inner_e:
+                            if attempt == max_retries - 1:
+                                raise inner_e # If all retries fail, raise the error
+                            time.sleep(2 * (attempt + 1)) # Wait 2s, then 4s before retrying
+
+                    if response:
+                        st.success("Analysis Complete!")
+                        st.write(response.text)
+
                 except Exception as e:
-                    st.warning("⚠️ The AI server is experiencing high traffic right now (503 error). Please wait a few seconds and click 'Ask AI Assistant' again!")
+                    st.error("⚠️ Google's servers are experiencing high traffic right now. Please click 'Ask AI Assistant' again in a moment!")
         else:
             st.warning("Please enter a question first.")
 
 with tab2:
     st.subheader("Current Research Database & Filters")
-    
-    # Topic Filter
     if not df.empty and "topic" in df.columns:
         topics = ["All"] + list(df["topic"].unique())
         selected_topic = st.selectbox("Filter by Topic:", topics)
-        
         if selected_topic != "All":
             filtered_df = df[df["topic"] == selected_topic]
         else:
@@ -73,7 +81,6 @@ with tab2:
 
     st.dataframe(filtered_df)
 
-    # Download CSV Button
     if not df.empty:
         csv_data = df.to_csv(index=False).encode('utf-8')
         st.download_button(
