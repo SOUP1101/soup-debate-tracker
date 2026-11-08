@@ -16,10 +16,10 @@ def img_to_base64(file_path):
         return base64.b64encode(data).decode("utf-8")
     return ""
 
-cb_base64 = img_to_base64("cherry_blossom.jpg")
-gt_base64 = img_to_base64("green_tree.jpg")
-al_base64 = img_to_base64("autumn_leaves.jpg")
-sm_base64 = img_to_base64("snowman.jpg")
+cb_base64 = img_to_base64("image_ef6f1d.jpg")
+gt_base64 = img_to_base64("image_ef6f37.jpg")
+al_base64 = img_to_base64("image_ef72e1.jpg")
+sm_base64 = img_to_base64("image_ef729c.jpg")
 
 st.markdown(f"""
 <style>
