@@ -16,22 +16,32 @@ def img_to_base64(file_path):
         return base64.b64encode(data).decode("utf-8")
     return ""
 
-# Design helper: looks for a .png first (best, keeps transparency), then .jpg / .jpeg
-def corner_art(name, css_class):
-    for ext, mime in [(".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg")]:
-        data = img_to_base64(name + ext)
-        if data:
-            extra = " art-jpg" if mime == "image/jpeg" else ""
-            return f'<img src="data:{mime};base64,{data}" class="art {css_class}{extra}">'
-    return ""
+# --- DESIGN: find the artwork files ---
+# Looks in the folder where app.py lives (and any subfolders like "images"),
+# ignores upper/lower case, and accepts .png, .jpg, .jpeg or .webp.
+APP_DIR = os.path.dirname(os.path.abspath(__file__))
+IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
-art_html = (
-    corner_art("cherry_blossom", "art-tl")
-    + corner_art("green_tree", "art-tr")
-    + corner_art("snow", "art-snow")
-    + corner_art("snowman", "art-snowman")
-    + corner_art("autumn_leaves", "art-leaves")
-)
+def find_art(name):
+    wanted = name.lower().replace("_", "").replace("-", "").replace(" ", "")
+    for folder, _, files in os.walk(APP_DIR):
+        for file_name in files:
+            stem, ext = os.path.splitext(file_name)
+            clean = stem.lower().replace("_", "").replace("-", "").replace(" ", "")
+            if clean == wanted and ext.lower() in IMAGE_TYPES:
+                data = img_to_base64(os.path.join(folder, file_name))
+                if data:
+                    return f"url('data:{IMAGE_TYPES[ext.lower()]};base64,{data}')"
+    return None
+
+ART_NAMES = ["snowman", "snow", "autumn_leaves", "cherry_blossom", "green_tree"]
+art = {name: find_art(name) for name in ART_NAMES}
+missing_art = [name for name, url in art.items() if url is None]
+
+# Each picture becomes a background layer of the page (first = on top).
+# Missing pictures are replaced by a transparent layer so the layout stays the same.
+EMPTY = "linear-gradient(transparent, transparent)"
+art_layers = ", ".join(art[name] or EMPTY for name in ART_NAMES)
 
 st.markdown(f"""
 <style>
@@ -49,9 +59,47 @@ st.markdown(f"""
     }}
 
     /* ---------- Lavender background with soft glowing centre ---------- */
+    /* Order of layers: snowman, snow, autumn leaves, cherry blossom, green tree, gradient */
     [data-testid="stAppViewContainer"] {{
         background-color: var(--lav-bg);
-        background-image: radial-gradient(ellipse at 50% 40%, #e6e1ef 0%, #cfc7de 40%, var(--lav-bg) 100%);
+        background-image:
+            {art_layers},
+            radial-gradient(ellipse at 50% 40%, #e6e1ef 0%, #cfc7de 40%, var(--lav-bg) 100%);
+        background-repeat: no-repeat;
+        background-attachment: fixed;
+        background-position:
+            left 70px bottom 70px,
+            left 15px bottom 15px,
+            right 15px bottom 15px,
+            left 15px top 15px,
+            right 15px top 15px,
+            center;
+        background-size:
+            230px auto,
+            640px auto,
+            560px auto,
+            420px auto,
+            340px auto,
+            cover;
+    }}
+    /* Smaller screens: shrink the art so it doesn't crowd the content */
+    @media (max-width: 1300px) {{
+        [data-testid="stAppViewContainer"] {{
+            background-position:
+                left 40px bottom 45px,
+                left 15px bottom 15px,
+                right 15px bottom 15px,
+                left 15px top 15px,
+                right 15px top 15px,
+                center;
+            background-size:
+                150px auto,
+                400px auto,
+                360px auto,
+                270px auto,
+                230px auto,
+                cover;
+        }}
     }}
     [data-testid="stHeader"] {{
         background: rgba(0,0,0,0);
@@ -70,7 +118,7 @@ st.markdown(f"""
 
     /* ---------- Centre column (sits above the artwork) ---------- */
     [data-testid="stMainBlockContainer"] {{
-        max-width: 640px !important;
+        max-width: 860px !important;
         margin: 0 auto !important;
         padding-top: 3rem !important;
         padding-left: 1rem !important;
@@ -109,17 +157,13 @@ st.markdown(f"""
     }}
 
     /* ---------- Tabs panel ---------- */
-    .stTabs {{
-        background: var(--lav-panel);
-        border: 1px solid var(--lav-border);
-        border-radius: 4px;
-        box-shadow: 0 2px 8px rgba(60, 50, 90, 0.12);
-        overflow: hidden;
-    }}
+    /* No box around the workspace: tabs sit directly on the background */
     .stTabs [data-baseweb="tab-list"] {{
         gap: 0;
         background: var(--lav-tab);
-        border-bottom: 1px solid var(--lav-border);
+        border: 1px solid var(--lav-border);
+        border-radius: 4px;
+        overflow: hidden;
     }}
     .stTabs [data-baseweb="tab"] {{
         height: 42px;
@@ -143,8 +187,7 @@ st.markdown(f"""
         display: none;
     }}
     .stTabs [data-baseweb="tab-panel"] {{
-        padding: 1.1rem 1.1rem 1.4rem 1.1rem;
-        min-height: 380px;
+        padding: 1.4rem 0.4rem 1.6rem 0.4rem;
     }}
 
     /* ---------- Text, labels, inputs ---------- */
@@ -191,37 +234,14 @@ st.markdown(f"""
     }}
     hr {{ border-color: var(--lav-border) !important; }}
 
-    /* ---------- Seasonal artwork (behind the content) ---------- */
-    .art {{
-        position: fixed;
-        pointer-events: none;
-        z-index: 1;
-    }}
-    /* JPGs with a white background: blend the white away */
-    .art-jpg {{ mix-blend-mode: multiply; }}
-
-    .art-tl {{ top: 15px; left: 15px; width: 420px; }}
-    .art-tr {{ top: 15px; right: 15px; width: 340px; }}
-    .art-snow {{ bottom: 15px; left: 15px; width: 640px; }}
-    .art-snowman {{ bottom: 70px; left: 70px; width: 230px; }}
-    .art-leaves {{ bottom: 15px; right: 15px; width: 560px; }}
-
-    /* Smaller screens: shrink the art so it doesn't crowd the content */
-    @media (max-width: 1100px) {{
-        .art-tl {{ width: 260px; }}
-        .art-tr {{ width: 220px; }}
-        .art-snow {{ width: 380px; }}
-        .art-snowman {{ width: 140px; bottom: 45px; left: 40px; }}
-        .art-leaves {{ width: 340px; }}
-    }}
-    @media (max-width: 700px) {{
-        .art {{ opacity: 0.35; }}
-    }}
 </style>
 
 <div class="page-frame"></div>
-{art_html}
 """, unsafe_allow_html=True)
+
+# Tells you which picture files couldn't be found (disappears once they're all there)
+if missing_art:
+    st.caption("🖼️ Picture files not found next to app.py: " + ", ".join(missing_art))
 
 # --- TITLE ---
 st.title("Data tracker for English debate")
