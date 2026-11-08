@@ -4,16 +4,18 @@ from google import genai
 import os
 import time
 
-# --- PAGE CONFIG & CALMING BACKGROUND DESIGN ---
+# --- PAGE CONFIG & CUSTOM SEASONAL CORNER DESIGN ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
-    /* Calming background pattern across the entire viewport */
+    /* Calming background pattern across the entire viewport with a center-fading gradient vignette */
     [data-testid="stAppViewContainer"] {
         background-color: #f4f6f9;
-        background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
-        background-size: 28px 28px;
+        background-image: 
+            radial-gradient(circle at center, rgba(244, 246, 249, 0) 40%, rgba(209, 219, 228, 0.45) 100%),
+            radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
+        background-size: 100% 100%, 28px 28px;
     }
     [data-testid="stHeader"] {
         background: rgba(0,0,0,0);
@@ -43,7 +45,55 @@ st.markdown("""
         background-color: #2c5282;
         color: white;
     }
+    
+    /* Corner Decorations with Fade-to-Center Effect */
+    .corner-tl {
+        position: fixed;
+        top: 15px;
+        left: 15px;
+        font-size: 2.2rem;
+        z-index: 99999;
+        opacity: 0.85;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    .corner-tr {
+        position: fixed;
+        top: 15px;
+        right: 15px;
+        font-size: 2.2rem;
+        z-index: 99999;
+        opacity: 0.85;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    .corner-br {
+        position: fixed;
+        bottom: 15px;
+        right: 15px;
+        font-size: 2rem;
+        z-index: 99999;
+        opacity: 0.85;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
+    .corner-bl {
+        position: fixed;
+        bottom: 15px;
+        left: 15px;
+        font-size: 2rem;
+        z-index: 99999;
+        opacity: 0.85;
+        pointer-events: none;
+        filter: drop-shadow(0 2px 4px rgba(0,0,0,0.1));
+    }
 </style>
+
+<!-- Corner Art HTML Injection -->
+<div class="corner-tl" title="Cherry Blossom Tree">🌸🌳</div>
+<div class="corner-tr" title="Green Leaf Tree">🌲🌿</div>
+<div class="corner-br" title="Fallen Autumn Leaves">🍁🍂</div>
+<div class="corner-bl" title="Snow & Snowman">❄️⛄</div>
 """, unsafe_allow_html=True)
 
 # --- PASSWORD SECURITY SETUP ---
@@ -59,7 +109,7 @@ st.markdown("Manage team research, track evidence URLs, organize collaborative t
 CSV_FILE = "research_log.csv"
 TODO_FILE = "todo_list.csv"
 
-# --- GUARANTEED BLANK START (Auto-clears old dummy rows) ---
+# --- DATABASE LOADING ---
 def load_research():
     expected_columns = ["id", "topic", "source", "summary", "researcher", "printed", "url"]
     if os.path.exists(CSV_FILE):
@@ -71,9 +121,6 @@ def load_research():
                         df[col] = False
                     else:
                         df[col] = ""
-            if not df.empty and ("Mock" in str(df.iloc[0].get("topic", "")) or "Example" in str(df.iloc[0].get("topic", ""))):
-                df = pd.DataFrame(columns=expected_columns)
-                df.to_csv(CSV_FILE, index=False)
             return df
         except Exception:
             df = pd.DataFrame(columns=expected_columns)
@@ -92,7 +139,6 @@ def load_todo():
             for col in expected_todo_cols:
                 if col not in df.columns:
                     df[col] = "Open" if col == "status" else ""
-            # Ensure text compatibility to prevent type errors
             df["assignee"] = df["assignee"].astype(str)
             df["status"] = df["status"].astype(str)
             return df
