@@ -268,14 +268,36 @@ st.markdown(f"""
     [data-testid="stAppViewContainer"] h3 {{
         color: var(--ink);
     }}
-    [data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {{
-        background-color: #ffffff !important;
-        border: 1px solid #c9c1d9 !important;
-        border-radius: 4px !important;
+    /* Every box: near-white with a whisper of pink and a soft pink border */
+    [data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div,
+    [data-baseweb="base-input"] {{
+        background-color: #fffbfc !important;
+        border: 1px solid #ecd6de !important;
+        border-radius: 6px !important;
     }}
-    [data-baseweb="input"] input, [data-baseweb="textarea"] textarea {{
-        background-color: #ffffff !important;
+    [data-baseweb="input"] input, [data-baseweb="textarea"] textarea, [data-baseweb="base-input"] input,
+    [data-baseweb="select"] input, [data-baseweb="select"] div {{
+        background-color: #fffbfc !important;
         color: var(--ink) !important;
+    }}
+    [data-baseweb="input"]:focus-within, [data-baseweb="textarea"]:focus-within, [data-baseweb="select"] > div:focus-within {{
+        border-color: #d9a9bb !important;
+        box-shadow: 0 0 0 2px rgba(236, 190, 207, 0.35) !important;
+    }}
+    input::placeholder, textarea::placeholder {{ color: #a59aab !important; }}
+    /* Dropdown menus */
+    [data-baseweb="popover"] ul, [data-baseweb="popover"] li, [data-baseweb="menu"] {{
+        background-color: #fffbfc !important;
+        color: var(--ink) !important;
+    }}
+    [data-baseweb="popover"] li:hover, [data-baseweb="popover"] li[aria-selected="true"] {{
+        background-color: #fbe9ef !important;
+    }}
+    /* Checkboxes, radio buttons, info/success boxes, table */
+    [data-testid="stCheckbox"] label span, [data-baseweb="radio"] div:first-child {{ border-color: #d9a9bb !important; }}
+    [data-testid="stAlert"] {{ background-color: rgba(255, 251, 252, 0.85) !important; color: var(--ink) !important; }}
+    [data-testid="stDataFrame"], [data-testid="stDataEditor"] {{
+        border: 1px solid #ecd6de; border-radius: 6px; overflow: hidden; background: #fffbfc;
     }}
 
     /* ---------- Buttons ---------- */
@@ -299,8 +321,8 @@ st.markdown(f"""
 
     /* Forms, expanders, tables blend into the lavender panel */
     [data-testid="stForm"], [data-testid="stExpander"] details {{
-        background: rgba(255, 255, 255, 0.35);
-        border: 1px solid var(--lav-border) !important;
+        background: rgba(255, 251, 252, 0.6);
+        border: 1px solid #ecd6de !important;
         border-radius: 6px;
     }}
     hr {{ border-color: var(--lav-border) !important; }}
