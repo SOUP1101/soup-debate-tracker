@@ -4,12 +4,17 @@ from google import genai
 import os
 import time
 
-# --- PAGE CONFIG & CUSTOM UI STYLING ---
+# --- PAGE CONFIG & CUSTOM CALMING UI STYLING ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
-    .main { background-color: #f8f9fa; }
+    /* Calming background pattern and soft color palette */
+    .main { 
+        background-color: #f4f6f9;
+        background-image: radial-gradient(#d0d7de 1px, transparent 1px);
+        background-size: 24px 24px;
+    }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
         height: 45px;
@@ -17,16 +22,23 @@ st.markdown("""
         background-color: #ffffff;
         border-radius: 8px 8px 0px 0px;
         font-weight: 600;
-        color: #31333F;
-        border: 1px solid #e0e0e0;
+        color: #2c3e50;
+        border: 1px solid #cbd5e1;
     }
     .stTabs [aria-selected="true"] {
-        background-color: #ff4b4b !important;
+        background-color: #2b6cb0 !important;
         color: white !important;
     }
     div.stButton > button {
         border-radius: 6px;
         font-weight: 600;
+        background-color: #2b6cb0;
+        color: white;
+        border: none;
+    }
+    div.stButton > button:hover {
+        background-color: #2c5282;
+        color: white;
     }
 </style>
 """, unsafe_allow_html=True)
@@ -39,18 +51,17 @@ if "APP_PASSWORD" in st.secrets:
         st.stop()
 
 st.title("📊 Data tracker for English debate")
-st.markdown("Manage team research, track evidence URLs, organize to-do queues, and query your database with Gemini AI.")
+st.markdown("Manage team research, track evidence URLs, organize collaborative to-do queues, and query your database with Gemini AI.")
 
 CSV_FILE = "research_log.csv"
 TODO_FILE = "todo_list.csv"
 
-# --- ROBUST DATABASE LOADING WITH AUTO-MIGRATION ---
+# --- GUARANTEED BLANK INITIALIZATION ---
 def load_research():
     expected_columns = ["id", "topic", "source", "summary", "researcher", "printed", "url"]
     if os.path.exists(CSV_FILE):
         try:
             df = pd.read_csv(CSV_FILE)
-            # Automatically add any missing columns if loading an older CSV file format
             for col in expected_columns:
                 if col not in df.columns:
                     if col == "printed":
@@ -63,6 +74,7 @@ def load_research():
             df.to_csv(CSV_FILE, index=False)
             return df
     else:
+        # Starts 100% blank
         df = pd.DataFrame(columns=expected_columns)
         df.to_csv(CSV_FILE, index=False)
         return df
@@ -74,7 +86,7 @@ def load_todo():
             df = pd.read_csv(TODO_FILE)
             for col in expected_todo_cols:
                 if col not in df.columns:
-                    df[col] = "Open" if col == "status" else "Unassigned"
+                    df[col] = "Open" if col == "status" else ""
             return df
         except Exception:
             df = pd.DataFrame(columns=expected_todo_cols)
@@ -106,7 +118,7 @@ tab1, tab2, tab3, tab4 = st.tabs([
 with tab1:
     st.subheader("Ask AI about Team Research")
     user_question = st.text_input("Enter your research question:")
-    if st.button("Ask AI Assistant", type="primary"):
+    if st.button("Ask AI Assistant"):
         if user_question:
             api_key = None
             try:
@@ -166,7 +178,8 @@ with tab2:
     with col_s1:
         search_query = st.text_input("🔍 Search logs (keywords in topic, source, summary, or researcher):", "")
     with col_s2:
-        sort_option = st.selectbox("Sort View By:", ["Default (ID Order)", "By Topic", "By Researcher", "By Source"])
+        # Non-typeable radio buttons for sorting
+        sort_option = st.radio("Sort View By:", ["Default (ID Order)", "By Topic", "By Researcher", "By Source"], horizontal=True)
 
     filtered_df = df.copy()
     if search_query:
@@ -231,34 +244,10 @@ with tab2:
 with tab3:
     st.subheader("Add New Research Entry")
     
-    existing_topics = list(df["topic"].dropna().unique()) if not df.empty and "topic" in df.columns else []
-    existing_researchers = list(df["researcher"].dropna().unique()) if not df.empty and "researcher" in df.columns else []
-    existing_sources = list(df["source"].dropna().unique()) if not df.empty and "source" in df.columns else []
-
     with st.form("add_research_form", clear_on_submit=True):
-        topic_choice = st.selectbox("Debate Topic", ["-- Select Existing Topic --", "➕ Add New Topic..."] + existing_topics)
-        if topic_choice == "➕ Add New Topic...":
-            new_topic = st.text_input("Enter New Topic Name")
-        elif topic_choice != "-- Select Existing Topic --":
-            new_topic = topic_choice
-        else:
-            new_topic = st.text_input("Enter Topic Name")
-
-        res_choice = st.selectbox("Researcher Name", ["-- Select Existing Researcher --", "➕ Add New Researcher..."] + existing_researchers)
-        if res_choice == "➕ Add New Researcher...":
-            new_researcher = st.text_input("Enter New Researcher Name")
-        elif res_choice != "-- Select Existing Researcher --":
-            new_researcher = res_choice
-        else:
-            new_researcher = st.text_input("Enter Researcher Name")
-
-        src_choice = st.selectbox("Source / Citation", ["-- Select Existing Source --", "➕ Add New Source..."] + existing_sources)
-        if src_choice == "➕ Add New Source...":
-            new_source = st.text_input("Enter New Source / Citation")
-        elif src_choice != "-- Select Existing Source --":
-            new_source = src_choice
-        else:
-            new_source = st.text_input("Enter Source / Citation")
+        new_topic = st.text_input("Debate Topic")
+        new_researcher = st.text_input("Researcher Name")
+        new_source = st.text_input("Source / Citation")
 
         prefill = st.session_state.get("prefill_summary", "")
         new_summary = st.text_area("Key Summary / Arguments", value=prefill)
@@ -290,11 +279,10 @@ with tab3:
 # ================= TAB 4: RESEARCH TO-DO QUEUE =================
 with tab4:
     st.subheader("✅ Research To-Do Queue & Workflow")
-    st.markdown("Add evidence claims you need for debate cases. Assign team members, track work status, and instantly hand them over to the research log when finished!")
+    st.markdown("Add evidence claims you need for debate cases. Set tasks to 'In Progress' and enter your name so teammates know who is working on it!")
 
     with st.form("todo_form", clear_on_submit=True):
         todo_claim = st.text_input("Desired Evidence Claim / Argument (e.g., 'Pesticides are harmful to human health')")
-        todo_assignee = st.text_input("Assigned Researcher (Optional)")
         todo_submit = st.form_submit_button("Add to To-Do Queue")
 
         if todo_submit:
@@ -303,7 +291,7 @@ with tab4:
                 new_t_row = {
                     "id": new_t_id,
                     "claim": todo_claim,
-                    "assignee": todo_assignee if todo_assignee else "Unassigned",
+                    "assignee": "",
                     "status": "Open"
                 }
                 todo_df = pd.concat([todo_df, pd.DataFrame([new_t_row])], ignore_index=True)
@@ -321,12 +309,25 @@ with tab4:
             cols = st.columns([3, 2, 2])
             with cols[0]:
                 st.markdown(f"**Claim:** {row['claim']}")
-                st.markdown(f"*Assignee:* {row['assignee']}")
+                current_assignee = row['assignee'] if pd.notna(row['assignee']) and str(row['assignee']).strip() != "" else "None"
+                st.markdown(f"*Worked on by:* **{current_assignee}**")
             with cols[1]:
-                status_val = st.selectbox(f"Status {row['id']}", ["Open", "In Progress", "Completed"], index=["Open", "In Progress", "Completed"].index(row['status']) if row['status'] in ["Open", "In Progress", "Completed"] else 0, key=f"status_{row['id']}")
+                # Only Open and In Progress status options
+                status_options = ["Open", "In Progress"]
+                current_status = row['status'] if row['status'] in status_options else "Open"
+                status_val = st.selectbox(f"Status {row['id']}", status_options, index=status_options.index(current_status), key=f"status_{row['id']}")
+                
                 if status_val != row['status']:
                     todo_df.at[idx, 'status'] = status_val
                     todo_df.to_csv(TODO_FILE, index=False)
+                    st.rerun()
+
+                # Dynamically show name input box if status is "In Progress"
+                if status_val == "In Progress":
+                    worker_name = st.text_input(f"Your Name (Who is working on ID {row['id']}):", value=str(row['assignee']) if pd.notna(row['assignee']) else "", key=f"worker_{row['id']}")
+                    if worker_name != row['assignee']:
+                        todo_df.at[idx, 'assignee'] = worker_name
+                        todo_df.to_csv(TODO_FILE, index=False)
             with cols[2]:
                 if st.button(f"🚀 Move to Add & Complete", key=f"move_{row['id']}"):
                     st.session_state["prefill_summary"] = row['claim']
