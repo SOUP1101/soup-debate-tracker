@@ -4,42 +4,86 @@ from google import genai
 import os
 import time
 
-# --- 5. PASSWORD SECURITY SETUP ---
-# To secure your app, make sure you add APP_PASSWORD = "your_chosen_password" 
-# in your Streamlit Cloud Secrets dashboard alongside your GEMINI_API_KEY.
+# --- PAGE CONFIG & CUSTOM UI STYLING ---
+st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
+
+st.markdown("""
+<style>
+    .main { background-color: #f8f9fa; }
+    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
+    .stTabs [data-baseweb="tab"] {
+        height: 45px;
+        white-space: pre-wrap;
+        background-color: #ffffff;
+        border-radius: 8px 8px 0px 0px;
+        font-weight: 600;
+        color: #31333F;
+        border: 1px solid #e0e0e0;
+    }
+    .stTabs [aria-selected="true"] {
+        background-color: #ff4b4b !important;
+        color: white !important;
+    }
+    div.stButton > button {
+        border-radius: 6px;
+        font-weight: 600;
+    }
+</style>
+""", unsafe_allow_html=True)
+
+# --- PASSWORD SECURITY SETUP ---
 if "APP_PASSWORD" in st.secrets:
-    password = st.text_input("🔒 Enter Password to Access S.O.U.P.:", type="password")
+    password = st.text_input("🔒 Enter Password to Access Data tracker for English debate:", type="password")
     if password != st.secrets["APP_PASSWORD"]:
         st.warning("Please enter the correct password to access this private debate research tracker.")
-        st.stop() # Stops execution here so unauthorized visitors cannot see the app
+        st.stop()
 
-st.title("📚 S.O.U.P. Debate Research Tracker")
-st.write("Manage team research, filter by topic, track print status, and query your database with Gemini AI!")
+st.title("📊 Data tracker for English debate")
+st.markdown("Manage team research, track evidence URLs, organize to-do queues, and query your database with Gemini AI.")
 
 CSV_FILE = "research_log.csv"
+TODO_FILE = "todo_list.csv"
 
-# --- 1. BLANK LOG INITIALIZATION ---
-def load_data():
+# --- INITIALIZE DATABASES ---
+def load_research():
     if os.path.exists(CSV_FILE):
         return pd.read_csv(CSV_FILE)
     else:
-        # Starts completely blank with the requested columns
-        df = pd.DataFrame(columns=["id", "topic", "source", "summary", "researcher", "printed"])
+        df = pd.DataFrame(columns=["id", "topic", "source", "summary", "researcher", "printed", "url"])
         df.to_csv(CSV_FILE, index=False)
         return df
 
-df = load_data()
+def load_todo():
+    if os.path.exists(TODO_FILE):
+        return pd.read_csv(TODO_FILE)
+    else:
+        df = pd.DataFrame(columns=["id", "claim", "assignee", "status"])
+        df.to_csv(TODO_FILE, index=False)
+        return df
 
-# Ensure 'printed' column is boolean for checkboxes
+df = load_research()
+todo_df = load_todo()
+
 if "printed" in df.columns:
     df["printed"] = df["printed"].astype(bool)
 
-tab1, tab2, tab3 = st.tabs(["🔍 Query AI", "📋 View, Edit & Delete Log", "➕ Add New Research"])
+# Initialize session state for To-Do hand-off
+if "prefill_summary" not in st.session_state:
+    st.session_state["prefill_summary"] = ""
 
+# --- TAB NAVIGATION ---
+tab1, tab2, tab3, tab4 = st.tabs([
+    "🔍 Query AI", 
+    "📋 View, Edit & Log", 
+    "➕ Add New Research", 
+    "✅ Research To-Do Queue"
+])
+
+# ================= TAB 1: QUERY AI =================
 with tab1:
     st.subheader("Ask AI about Team Research")
-    user_question = st.text_input("Enter your question:")
-    if st.button("Ask AI Assistant"):
+    user_question = st.text_input("Enter your research question:")
+    if st.button("Ask AI Assistant", type="primary"):
         if user_question:
             api_key = None
             try:
@@ -60,11 +104,11 @@ with tab1:
                         database_text = df.to_string()
 
                         prompt = f"""
-                        You are a helpful research assistant for a high school debate team.
-                        Here is our team's current research log database:
+                        You are a professional research assistant for an English debate team.
+                        Here is our team's current research log database (including sources, summaries, researchers, and URLs):
                         {database_text}
 
-                        Answer the following question based ONLY on the database provided:
+                        Answer the following question based ONLY on the database provided, and cite your sources/URLs where applicable:
                         {user_question}
                         """
 
@@ -84,55 +128,131 @@ with tab1:
 
                         if response:
                             st.success("Analysis Complete!")
-                            st.write(response.text)
+                            st.markdown(response.text)
 
                     except Exception as e:
                         st.error(f"⚠️ Error communicating with Gemini API: {e}")
         else:
             st.warning("Please enter a question first.")
 
+# ================= TAB 2: VIEW, EDIT & LOG =================
 with tab2:
-    st.subheader("Current Research Database & Management")
-    st.info("💡 You can edit cells directly, check/uncheck 'printed' boxes, or delete rows using the trash icon/sidebar in the table below!")
+    st.subheader("Current Research Database & Evidence")
+    
+    # Feature 3: Advanced Search & Filtering
+    col_s1, col_s2 = st.columns([2, 1])
+    with col_s1:
+        search_query = st.text_input("🔍 Search logs (keywords in topic, source, summary, or researcher):", "")
+    with col_s2:
+        # Feature 2: Sorting options (without changing ID)
+        sort_option = st.selectbox("Sort View By:", ["Default (ID Order)", "By Topic", "By Researcher", "By Source"])
 
-    # --- 2 & 3. INTERACTIVE DATA EDITOR (Edit, Toggle Print, Delete Rows) ---
+    filtered_df = df.copy()
+    if search_query:
+        q = search_query.lower()
+        mask = (
+            filtered_df["topic"].astype(str).str.lower().str.contains(q) |
+            filtered_df["source"].astype(str).str.lower().str.contains(q) |
+            filtered_df["summary"].astype(str).str.lower().str.contains(q) |
+            filtered_df["researcher"].astype(str).str.lower().str.contains(q)
+        )
+        filtered_df = filtered_df[mask]
+
+    if sort_option == "By Topic" and not filtered_df.empty:
+        filtered_df = filtered_df.sort_values(by="topic")
+    elif sort_option == "By Researcher" and not filtered_df.empty:
+        filtered_df = filtered_df.sort_values(by="researcher")
+    elif sort_option == "By Source" and not filtered_df.empty:
+        filtered_df = filtered_df.sort_values(by="source")
+
+    st.info("💡 You can edit cells, check/uncheck 'printed' boxes, or delete rows directly in the table below!")
+
+    # Interactive Data Editor
     edited_df = st.data_editor(
-        df, 
+        filtered_df, 
         num_rows="dynamic", 
         key="research_editor",
         use_container_width=True
     )
 
-    # Save changes automatically when the user edits or deletes rows
-    if not edited_df.equals(df):
-        edited_df.to_csv(CSV_FILE, index=False)
+    # Save edits back to CSV safely (updating main df matching IDs)
+    if not edited_df.equals(filtered_df):
+        # Merge edits back into master df
+        for idx, row in edited_df.iterrows():
+            match_idx = df[df["id"] == row["id"]].index
+            if not match_idx.empty:
+                for col in df.columns:
+                    df.at[match_idx[0], col] = row[col]
+        df.to_csv(CSV_FILE, index=False)
         st.success("Database updated successfully!")
 
-    # Topic Filter for viewing
-    if not edited_df.empty and "topic" in edited_df.columns:
-        topics = ["All"] + list(edited_df["topic"].dropna().unique())
-        selected_topic = st.selectbox("Filter view by Topic:", topics)
-        if selected_topic != "All":
-            st.dataframe(edited_df[edited_df["topic"] == selected_topic], use_container_width=True)
+    # Feature 4: Hidden URL / Evidence Links Expandable Section
+    with st.expander("🔗 View Source URLs & Evidence Links"):
+        if not df.empty:
+            for idx, row in df.iterrows():
+                url_val = row.get("url", "")
+                if pd.notna(url_val) and str(url_val).strip() != "":
+                    st.markdown(f"**[ID {row['id']}] {row['topic']}** — *{row['source']}*")
+                    st.markdown(f"🔗 [Open Source Link]({url_val})")
+                    st.divider()
+                else:
+                    st.markdown(f"**[ID {row['id']}] {row['topic']}** — *No URL provided*")
+        else:
+            st.write("No research entries yet.")
 
-    # Download CSV Button
-    if not edited_df.empty:
-        csv_data = edited_df.to_csv(index=False).encode('utf-8')
+    # Feature 6: Clean CSV Export with utf-8-sig
+    if not df.empty:
+        csv_data = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button(
-            label="📥 Download Research Log as CSV",
+            label="📥 Download Clean CSV Export",
             data=csv_data,
-            file_name="research_log.csv",
-            mime="text/css" if False else "text/csv",
+            file_name="debate_research_log.csv",
+            mime="text/csv",
         )
 
+# ================= TAB 3: ADD NEW RESEARCH =================
 with tab3:
     st.subheader("Add New Research Entry")
-    # --- 2. NEW INPUT BOXES (Researcher & Printed Checkbox) ---
+    
+    # Feature 1: Dropdown + Custom Input for Topic, Researcher, Source
+    existing_topics = list(df["topic"].dropna().unique()) if not df.empty else []
+    existing_researchers = list(df["researcher"].dropna().unique()) if not df.empty else []
+    existing_sources = list(df["source"].dropna().unique()) if not df.empty else []
+
     with st.form("add_research_form", clear_on_submit=True):
-        new_topic = st.text_input("Debate Topic")
-        new_source = st.text_input("Source / Citation")
-        new_summary = st.text_area("Key Summary / Arguments")
-        new_researcher = st.text_input("Researcher Name (Who found this?)")
+        # Topic Selector / Custom Input
+        topic_choice = st.selectbox("Debate Topic", ["-- Select Existing Topic --", "➕ Add New Topic..."] + existing_topics)
+        if topic_choice == "➕ Add New Topic...":
+            new_topic = st.text_input("Enter New Topic Name")
+        elif topic_choice != "-- Select Existing Topic --":
+            new_topic = topic_choice
+        else:
+            new_topic = st.text_input("Enter Topic Name")
+
+        # Researcher Selector / Custom Input
+        res_choice = st.selectbox("Researcher Name", ["-- Select Existing Researcher --", "➕ Add New Researcher..."] + existing_researchers)
+        if res_choice == "➕ Add New Researcher...":
+            new_researcher = st.text_input("Enter New Researcher Name")
+        elif res_choice != "-- Select Existing Researcher --":
+            new_researcher = res_choice
+        else:
+            new_researcher = st.text_input("Enter Researcher Name")
+
+        # Source Selector / Custom Input
+        src_choice = st.selectbox("Source / Citation", ["-- Select Existing Source --", "➕ Add New Source..."] + existing_sources)
+        if src_choice == "➕ Add New Source...":
+            new_source = st.text_input("Enter New Source / Citation")
+        elif src_choice != "-- Select Existing Source --":
+            new_source = src_choice
+        else:
+            new_source = st.text_input("Enter Source / Citation")
+
+        # Summary pre-filled if coming from To-Do queue hand-off
+        prefill = st.session_state.get("prefill_summary", "")
+        new_summary = st.text_area("Key Summary / Arguments", value=prefill)
+        
+        # Feature 4: URL Field (Hidden by default in main table)
+        new_url = st.text_input("Source URL / Evidence Link (Optional)")
         new_printed = st.checkbox("Printed out already?")
         
         submit_button = st.form_submit_button("Save to Database")
@@ -146,11 +266,67 @@ with tab3:
                     "source": new_source, 
                     "summary": new_summary,
                     "researcher": new_researcher,
-                    "printed": bool(new_printed)
+                    "printed": bool(new_printed),
+                    "url": new_url if new_url else ""
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 df.to_csv(CSV_FILE, index=False)
+                st.session_state["prefill_summary"] = "" # Clear prefill
                 st.success("Successfully added new research entry!")
                 st.rerun()
             else:
-                st.error("Please fill out all fields (Topic, Source, Summary, and Researcher Name).")
+                st.error("Please fill out Topic, Researcher, Source, and Summary.")
+
+# ================= TAB 4: RESEARCH TO-DO QUEUE =================
+with tab4:
+    st.subheader("✅ Research To-Do Queue & Workflow")
+    st.markdown("Add evidence claims you need for debate cases. Assign team members, track work status, and instantly hand them over to the research log when finished!")
+
+    # Add To-Do Item Form
+    with st.form("todo_form", clear_on_submit=True):
+        todo_claim = st.text_input("Desired Evidence Claim / Argument (e.g., 'Pesticides are harmful to human health')")
+        todo_assignee = st.text_input("Assigned Researcher (Optional)")
+        todo_submit = st.form_submit_button("Add to To-Do Queue")
+
+        if todo_submit:
+            if todo_claim:
+                new_t_id = int(todo_df["id"].max()) + 1 if not todo_df.empty and pd.notna(todo_df["id"].max()) else 1
+                new_t_row = {
+                    "id": new_t_id,
+                    "claim": todo_claim,
+                    "assignee": todo_assignee if todo_assignee else "Unassigned",
+                    "status": "Open"
+                }
+                todo_df = pd.concat([todo_df, pd.DataFrame([new_t_row])], ignore_index=True)
+                todo_df.to_csv(TODO_FILE, index=False)
+                st.success("Added claim to To-Do queue!")
+                st.rerun()
+            else:
+                st.error("Please enter a claim.")
+
+    st.markdown("---")
+    st.subheader("Current To-Do List")
+
+    if not todo_df.empty:
+        for idx, row in todo_df.iterrows():
+            cols = st.columns([3, 2, 2])
+            with cols[0]:
+                st.markdown(f"**Claim:** {row['claim']}")
+                st.markdown(f"*Assignee:* {row['assignee']}")
+            with cols[1]:
+                status_val = st.selectbox(f"Status {row['id']}", ["Open", "In Progress", "Completed"], index=["Open", "In Progress", "Completed"].index(row['status']) if row['status'] in ["Open", "In Progress", "Completed"] else 0, key=f"status_{row['id']}")
+                if status_val != row['status']:
+                    todo_df.at[idx, 'status'] = status_val
+                    todo_df.to_csv(TODO_FILE, index=False)
+            with cols[2]:
+                # Workflow Hand-off Button
+                if st.button(f"🚀 Move to Add & Complete", key=f"move_{row['id']}"):
+                    # Pre-fill summary and remove from todo
+                    st.session_state["prefill_summary"] = row['claim']
+                    todo_df = todo_df.drop(idx).reset_index(drop=True)
+                    todo_df.to_csv(TODO_FILE, index=False)
+                    st.success("Claim moved! Go to the 'Add New Research' tab to complete citation and details.")
+                    st.rerun()
+            st.divider()
+    else:
+        st.info("Your To-Do queue is currently empty. Add a claim above to get started!")
