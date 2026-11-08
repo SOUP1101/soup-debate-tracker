@@ -42,6 +42,28 @@ def png_size(file_path):
         pass
     return None
 
+# Pictures that should be mirrored left-to-right so they grow out of their corner
+FLIP_ART = {"cherry_blossom"}
+
+def art_url(path, name):
+    # Trim empty transparent space (so cut edges touch the page frame) and flip if needed
+    try:
+        from PIL import Image, ImageOps
+        import io
+        img = Image.open(path).convert("RGBA")
+        box = img.getchannel("A").getbbox()
+        if box:
+            img = img.crop(box)
+        if name in FLIP_ART:
+            img = ImageOps.mirror(img)
+        buffer = io.BytesIO()
+        img.save(buffer, format="PNG")
+        data = base64.b64encode(buffer.getvalue()).decode("utf-8")
+        return f"url('data:image/png;base64,{data}')"
+    except Exception:
+        ext = os.path.splitext(path)[1].lower()
+        return f"url('data:{IMAGE_TYPES.get(ext, 'image/png')};base64,{img_to_base64(path)}')"
+
 def find_art(name):
     wanted = name.lower().replace("_", "").replace("-", "").replace(" ", "")
     by_size = None
@@ -53,13 +75,11 @@ def find_art(name):
             path = os.path.join(folder, file_name)
             clean = stem.lower().replace("_", "").replace("-", "").replace(" ", "")
             if clean == wanted:
-                data = img_to_base64(path)
-                if data:
-                    return f"url('data:{IMAGE_TYPES[ext.lower()]};base64,{data}')"
+                return art_url(path, name)
             elif by_size is None and ext.lower() == ".png" and png_size(path) == ART_SIZES.get(name):
                 by_size = path
     if by_size:
-        return f"url('data:image/png;base64,{img_to_base64(by_size)}')"
+        return art_url(by_size, name)
     return None
 
 ART_NAMES = ["snowman", "snow", "autumn_leaves", "cherry_blossom", "green_tree"]
