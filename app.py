@@ -44,20 +44,44 @@ st.markdown("Manage team research, track evidence URLs, organize to-do queues, a
 CSV_FILE = "research_log.csv"
 TODO_FILE = "todo_list.csv"
 
-# --- INITIALIZE DATABASES ---
+# --- ROBUST DATABASE LOADING WITH AUTO-MIGRATION ---
 def load_research():
+    expected_columns = ["id", "topic", "source", "summary", "researcher", "printed", "url"]
     if os.path.exists(CSV_FILE):
-        return pd.read_csv(CSV_FILE)
+        try:
+            df = pd.read_csv(CSV_FILE)
+            # Automatically add any missing columns if loading an older CSV file format
+            for col in expected_columns:
+                if col not in df.columns:
+                    if col == "printed":
+                        df[col] = False
+                    else:
+                        df[col] = ""
+            return df
+        except Exception:
+            df = pd.DataFrame(columns=expected_columns)
+            df.to_csv(CSV_FILE, index=False)
+            return df
     else:
-        df = pd.DataFrame(columns=["id", "topic", "source", "summary", "researcher", "printed", "url"])
+        df = pd.DataFrame(columns=expected_columns)
         df.to_csv(CSV_FILE, index=False)
         return df
 
 def load_todo():
+    expected_todo_cols = ["id", "claim", "assignee", "status"]
     if os.path.exists(TODO_FILE):
-        return pd.read_csv(TODO_FILE)
+        try:
+            df = pd.read_csv(TODO_FILE)
+            for col in expected_todo_cols:
+                if col not in df.columns:
+                    df[col] = "Open" if col == "status" else "Unassigned"
+            return df
+        except Exception:
+            df = pd.DataFrame(columns=expected_todo_cols)
+            df.to_csv(TODO_FILE, index=False)
+            return df
     else:
-        df = pd.DataFrame(columns=["id", "claim", "assignee", "status"])
+        df = pd.DataFrame(columns=expected_todo_cols)
         df.to_csv(TODO_FILE, index=False)
         return df
 
@@ -67,7 +91,6 @@ todo_df = load_todo()
 if "printed" in df.columns:
     df["printed"] = df["printed"].astype(bool)
 
-# Initialize session state for To-Do hand-off
 if "prefill_summary" not in st.session_state:
     st.session_state["prefill_summary"] = ""
 
@@ -139,12 +162,10 @@ with tab1:
 with tab2:
     st.subheader("Current Research Database & Evidence")
     
-    # Feature 3: Advanced Search & Filtering
     col_s1, col_s2 = st.columns([2, 1])
     with col_s1:
         search_query = st.text_input("🔍 Search logs (keywords in topic, source, summary, or researcher):", "")
     with col_s2:
-        # Feature 2: Sorting options (without changing ID)
         sort_option = st.selectbox("Sort View By:", ["Default (ID Order)", "By Topic", "By Researcher", "By Source"])
 
     filtered_df = df.copy()
@@ -167,7 +188,6 @@ with tab2:
 
     st.info("💡 You can edit cells, check/uncheck 'printed' boxes, or delete rows directly in the table below!")
 
-    # Interactive Data Editor
     edited_df = st.data_editor(
         filtered_df, 
         num_rows="dynamic", 
@@ -175,18 +195,16 @@ with tab2:
         use_container_width=True
     )
 
-    # Save edits back to CSV safely (updating main df matching IDs)
     if not edited_df.equals(filtered_df):
-        # Merge edits back into master df
         for idx, row in edited_df.iterrows():
             match_idx = df[df["id"] == row["id"]].index
             if not match_idx.empty:
                 for col in df.columns:
-                    df.at[match_idx[0], col] = row[col]
+                    if col in edited_df.columns:
+                        df.at[match_idx[0], col] = row[col]
         df.to_csv(CSV_FILE, index=False)
         st.success("Database updated successfully!")
 
-    # Feature 4: Hidden URL / Evidence Links Expandable Section
     with st.expander("🔗 View Source URLs & Evidence Links"):
         if not df.empty:
             for idx, row in df.iterrows():
@@ -200,7 +218,6 @@ with tab2:
         else:
             st.write("No research entries yet.")
 
-    # Feature 6: Clean CSV Export with utf-8-sig
     if not df.empty:
         csv_data = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button(
@@ -214,13 +231,11 @@ with tab2:
 with tab3:
     st.subheader("Add New Research Entry")
     
-    # Feature 1: Dropdown + Custom Input for Topic, Researcher, Source
-    existing_topics = list(df["topic"].dropna().unique()) if not df.empty else []
-    existing_researchers = list(df["researcher"].dropna().unique()) if not df.empty else []
-    existing_sources = list(df["source"].dropna().unique()) if not df.empty else []
+    existing_topics = list(df["topic"].dropna().unique()) if not df.empty and "topic" in df.columns else []
+    existing_researchers = list(df["researcher"].dropna().unique()) if not df.empty and "researcher" in df.columns else []
+    existing_sources = list(df["source"].dropna().unique()) if not df.empty and "source" in df.columns else []
 
     with st.form("add_research_form", clear_on_submit=True):
-        # Topic Selector / Custom Input
         topic_choice = st.selectbox("Debate Topic", ["-- Select Existing Topic --", "➕ Add New Topic..."] + existing_topics)
         if topic_choice == "➕ Add New Topic...":
             new_topic = st.text_input("Enter New Topic Name")
@@ -229,7 +244,6 @@ with tab3:
         else:
             new_topic = st.text_input("Enter Topic Name")
 
-        # Researcher Selector / Custom Input
         res_choice = st.selectbox("Researcher Name", ["-- Select Existing Researcher --", "➕ Add New Researcher..."] + existing_researchers)
         if res_choice == "➕ Add New Researcher...":
             new_researcher = st.text_input("Enter New Researcher Name")
@@ -238,7 +252,6 @@ with tab3:
         else:
             new_researcher = st.text_input("Enter Researcher Name")
 
-        # Source Selector / Custom Input
         src_choice = st.selectbox("Source / Citation", ["-- Select Existing Source --", "➕ Add New Source..."] + existing_sources)
         if src_choice == "➕ Add New Source...":
             new_source = st.text_input("Enter New Source / Citation")
@@ -247,11 +260,8 @@ with tab3:
         else:
             new_source = st.text_input("Enter Source / Citation")
 
-        # Summary pre-filled if coming from To-Do queue hand-off
         prefill = st.session_state.get("prefill_summary", "")
         new_summary = st.text_area("Key Summary / Arguments", value=prefill)
-        
-        # Feature 4: URL Field (Hidden by default in main table)
         new_url = st.text_input("Source URL / Evidence Link (Optional)")
         new_printed = st.checkbox("Printed out already?")
         
@@ -259,7 +269,7 @@ with tab3:
 
         if submit_button:
             if new_topic and new_source and new_summary and new_researcher:
-                new_id = int(df["id"].max()) + 1 if not df.empty and pd.notna(df["id"].max()) else 1
+                new_id = int(df["id"].max()) + 1 if not df.empty and "id" in df.columns and pd.notna(df["id"].max()) else 1
                 new_row = {
                     "id": new_id, 
                     "topic": new_topic, 
@@ -271,7 +281,7 @@ with tab3:
                 }
                 df = pd.concat([df, pd.DataFrame([new_row])], ignore_index=True)
                 df.to_csv(CSV_FILE, index=False)
-                st.session_state["prefill_summary"] = "" # Clear prefill
+                st.session_state["prefill_summary"] = ""
                 st.success("Successfully added new research entry!")
                 st.rerun()
             else:
@@ -282,7 +292,6 @@ with tab4:
     st.subheader("✅ Research To-Do Queue & Workflow")
     st.markdown("Add evidence claims you need for debate cases. Assign team members, track work status, and instantly hand them over to the research log when finished!")
 
-    # Add To-Do Item Form
     with st.form("todo_form", clear_on_submit=True):
         todo_claim = st.text_input("Desired Evidence Claim / Argument (e.g., 'Pesticides are harmful to human health')")
         todo_assignee = st.text_input("Assigned Researcher (Optional)")
@@ -290,7 +299,7 @@ with tab4:
 
         if todo_submit:
             if todo_claim:
-                new_t_id = int(todo_df["id"].max()) + 1 if not todo_df.empty and pd.notna(todo_df["id"].max()) else 1
+                new_t_id = int(todo_df["id"].max()) + 1 if not todo_df.empty and "id" in todo_df.columns and pd.notna(todo_df["id"].max()) else 1
                 new_t_row = {
                     "id": new_t_id,
                     "claim": todo_claim,
@@ -319,9 +328,7 @@ with tab4:
                     todo_df.at[idx, 'status'] = status_val
                     todo_df.to_csv(TODO_FILE, index=False)
             with cols[2]:
-                # Workflow Hand-off Button
                 if st.button(f"🚀 Move to Add & Complete", key=f"move_{row['id']}"):
-                    # Pre-fill summary and remove from todo
                     st.session_state["prefill_summary"] = row['claim']
                     todo_df = todo_df.drop(idx).reset_index(drop=True)
                     todo_df.to_csv(TODO_FILE, index=False)
