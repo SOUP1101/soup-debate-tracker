@@ -3,22 +3,45 @@ import pandas as pd
 from google import genai
 import os
 import time
+import base64
 
-# --- PAGE CONFIG & CUSTOM POP-STYLE CORNER ART DESIGN ---
+# --- PAGE CONFIG & CUSTOM SEASONAL CORNER ART DESIGN ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
-st.markdown("""
+# Helper function to convert local images to base64 for reliable web rendering
+def img_to_base64(file_path):
+    if os.path.exists(file_path):
+        with open(file_path, "rb") as f:
+            data = f.read()
+        return base64.b64encode(data).decode("utf-8")
+    return ""
+
+cb_base64 = img_to_base64("cherry_blossom.jpg")
+gt_base64 = img_to_base64("green_tree.jpg")
+al_base64 = img_to_base64("autumn_leaves.jpg")
+sm_base64 = img_to_base64("snowman.jpg")
+
+st.markdown(f"""
 <style>
     /* Clean calming background with soft center fade */
-    [data-testid="stAppViewContainer"] {
+    [data-testid="stAppViewContainer"] {{
         background-color: #f4f6f9;
         background-image: radial-gradient(circle at center, rgba(244, 246, 249, 1) 45%, rgba(220, 228, 236, 0.8) 100%);
-    }
-    [data-testid="stHeader"] {
+    }}
+    [data-testid="stHeader"] {{
         background: rgba(0,0,0,0);
-    }
-    .stTabs [data-baseweb="tab-list"] { gap: 8px; }
-    .stTabs [data-baseweb="tab"] {
+    }}
+    
+    /* Narrow the main workspace container so art doesn't overlap text/tables */
+    [data-testid="stMainBlockContainer"] {{
+        max-width: 850px !important;
+        margin: 0 auto !important;
+        padding-left: 2rem !important;
+        padding-right: 2rem !important;
+    }}
+
+    .stTabs [data-baseweb="tab-list"] {{ gap: 8px; }}
+    .stTabs [data-baseweb="tab"] {{
         height: 45px;
         white-space: pre-wrap;
         background-color: #ffffff;
@@ -26,142 +49,75 @@ st.markdown("""
         font-weight: 600;
         color: #2c3e50;
         border: 1px solid #cbd5e1;
-    }
-    .stTabs [aria-selected="true"] {
+    }}
+    .stTabs [aria-selected="true"] {{
         background-color: #2b6cb0 !important;
         color: white !important;
-    }
-    div.stButton > button {
+    }}
+    div.stButton > button {{
         border-radius: 6px;
         font-weight: 600;
         background-color: #2b6cb0;
         color: white;
         border: none;
-    }
-    div.stButton > button:hover {
+    }}
+    div.stButton > button:hover {{
         background-color: #2c5282;
         color: white;
-    }
+    }}
     
-    /* Large Pop-Style Illustrated Corner Art with Fade-to-Center Gradients */
-    .corner-art-tl {
+    /* Custom Corner Art Layout & Sizing (Bottom elements made smaller) */
+    .corner-tl {{
         position: fixed;
         top: 0;
         left: 0;
-        width: 320px;
-        height: 320px;
+        width: 260px;
         z-index: 99999;
         pointer-events: none;
-        opacity: 0.85;
-        mask-image: radial-gradient(circle at top left, black 30%, transparent 80%);
-        -webkit-mask-image: radial-gradient(circle at top left, black 30%, transparent 80%);
-    }
-    .corner-art-tr {
+        opacity: 0.9;
+        mask-image: radial-gradient(circle at top left, black 35%, transparent 85%);
+        -webkit-mask-image: radial-gradient(circle at top left, black 35%, transparent 85%);
+    }}
+    .corner-tr {{
         position: fixed;
         top: 0;
         right: 0;
-        width: 320px;
-        height: 320px;
+        width: 260px;
         z-index: 99999;
         pointer-events: none;
-        opacity: 0.85;
-        mask-image: radial-gradient(circle at top right, black 30%, transparent 80%);
-        -webkit-mask-image: radial-gradient(circle at top right, black 30%, transparent 80%);
-    }
-    .corner-art-br {
+        opacity: 0.9;
+        mask-image: radial-gradient(circle at top right, black 35%, transparent 85%);
+        -webkit-mask-image: radial-gradient(circle at top right, black 35%, transparent 85%);
+    }}
+    .corner-br {{
         position: fixed;
         bottom: 0;
         right: 0;
-        width: 320px;
-        height: 320px;
+        width: 190px;
         z-index: 99999;
         pointer-events: none;
-        opacity: 0.85;
-        mask-image: radial-gradient(circle at bottom right, black 30%, transparent 80%);
-        -webkit-mask-image: radial-gradient(circle at bottom right, black 30%, transparent 80%);
-    }
-    .corner-art-bl {
+        opacity: 0.9;
+        mask-image: radial-gradient(circle at bottom right, black 35%, transparent 85%);
+        -webkit-mask-image: radial-gradient(circle at bottom right, black 35%, transparent 85%);
+    }}
+    .corner-bl {{
         position: fixed;
         bottom: 0;
         left: 0;
-        width: 320px;
-        height: 320px;
+        width: 175px;
         z-index: 99999;
         pointer-events: none;
-        opacity: 0.85;
-        mask-image: radial-gradient(circle at bottom left, black 30%, transparent 80%);
-        -webkit-mask-image: radial-gradient(circle at bottom left, black 30%, transparent 80%);
-    }
+        opacity: 0.9;
+        mask-image: radial-gradient(circle at bottom left, black 35%, transparent 85%);
+        -webkit-mask-image: radial-gradient(circle at bottom left, black 35%, transparent 85%);
+    }}
 </style>
 
-<!-- Top-Left: Pop-Style Cherry Blossom Tree SVG -->
-<div class="corner-art-tl">
-    <svg viewBox="0 0 300 300" width="100%" height="100%">
-        <path d="M0,0 Q60,80 120,40 T220,10" fill="none" stroke="#5d4037" stroke-width="12" stroke-linecap="round"/>
-        <path d="M60,60 Q90,30 140,50" fill="none" stroke="#5d4037" stroke-width="8" stroke-linecap="round"/>
-        <!-- Pop-art vibrant pink blossoms -->
-        <circle cx="40" cy="30" r="28" fill="#ffb7c5" opacity="0.9"/>
-        <circle cx="90" cy="45" r="35" fill="#ff85a1" opacity="0.85"/>
-        <circle cx="130" cy="25" r="32" fill="#ffb7c5" opacity="0.9"/>
-        <circle cx="170" cy="55" r="38" fill="#ff5c8a" opacity="0.8"/>
-        <circle cx="110" cy="85" r="30" fill="#ff85a1" opacity="0.85"/>
-        <circle cx="200" cy="20" r="25" fill="#ffb7c5" opacity="0.9"/>
-    </svg>
-</div>
-
-<!-- Top-Right: Pop-Style Green Leaf Tree SVG -->
-<div class="corner-art-tr">
-    <svg viewBox="0 0 300 300" width="100%" height="100%">
-        <path d="M300,0 Q240,80 180,40 T80,10" fill="none" stroke="#3e2723" stroke-width="12" stroke-linecap="round"/>
-        <path d="M240,60 Q210,30 160,50" fill="none" stroke="#3e2723" stroke-width="8" stroke-linecap="round"/>
-        <!-- Pop-art vibrant green canopy -->
-        <circle cx="260" cy="30" r="30" fill="#81c784" opacity="0.9"/>
-        <circle cx="210" cy="45" r="38" fill="#4caf50" opacity="0.85"/>
-        <circle cx="170" cy="25" r="32" fill="#81c784" opacity="0.9"/>
-        <circle cx="130" cy="55" r="40" fill="#2e7d32" opacity="0.8"/>
-        <circle cx="190" cy="85" r="32" fill="#66bb6a" opacity="0.85"/>
-        <circle cx="100" cy="20" r="25" fill="#81c784" opacity="0.9"/>
-    </svg>
-</div>
-
-<!-- Bottom-Right: Pop-Style Fallen Autumn Leaves SVG -->
-<div class="corner-art-br">
-    <svg viewBox="0 0 300 300" width="100%" height="100%">
-        <!-- Vibrant red and golden yellow autumn leaves -->
-        <path d="M250,220 Q270,240 290,220 Q270,280 250,220 Z" fill="#e65100" opacity="0.9" transform="rotate(15 270 240)"/>
-        <path d="M200,260 Q220,280 240,260 Q220,310 200,260 Z" fill="#ffb300" opacity="0.9" transform="rotate(-30 220 280)"/>
-        <path d="M270,170 Q290,190 310,170 Q290,230 270,170 Z" fill="#ff3d00" opacity="0.85" transform="rotate(45 290 190)"/>
-        <path d="M160,280 Q180,300 200,280 Q180,330 160,280 Z" fill="#ffca28" opacity="0.95" transform="rotate(10 180 300)"/>
-        <path d="M220,200 Q240,220 260,200 Q240,260 220,200 Z" fill="#d84315" opacity="0.9" transform="rotate(-15 240 220)"/>
-    </svg>
-</div>
-
-<!-- Bottom-Left: Pop-Style Snow & Snowman SVG -->
-<div class="corner-art-bl">
-    <svg viewBox="0 0 300 300" width="100%" height="100%">
-        <!-- Soft snow drift mound -->
-        <path d="M0,300 Q80,250 180,270 T300,260 L300,300 L0,300 Z" fill="#e3f2fd" opacity="0.9"/>
-        <!-- Cute minimalist pop snowman -->
-        <!-- Body (bottom) -->
-        <circle cx="80" cy="245" r="28" fill="#ffffff" stroke="#90caf9" stroke-width="3"/>
-        <!-- Body (middle) -->
-        <circle cx="80" cy="202" r="20" fill="#ffffff" stroke="#90caf9" stroke-width="3"/>
-        <!-- Head -->
-        <circle cx="80" cy="168" r="14" fill="#ffffff" stroke="#90caf9" stroke-width="3"/>
-        <!-- Eyes & buttons -->
-        <circle cx="76" cy="165" r="2" fill="#37474f"/>
-        <circle cx="84" cy="165" r="2" fill="#37474f"/>
-        <path d="M78,172 Q80,176 82,172" fill="none" stroke="#ff7043" stroke-width="2" stroke-linecap="round"/>
-        <!-- Carrot nose -->
-        <polygon points="80,168 90,170 80,172" fill="#ff9800"/>
-        <!-- Scarf -->
-        <path d="M68,185 Q80,192 92,185 L90,192 Q80,198 70,192 Z" fill="#e91e63"/>
-        <!-- Snowflakes floating -->
-        <circle cx="130" cy="180" r="4" fill="#ffffff" opacity="0.8"/>
-        <circle cx="150" cy="220" r="3" fill="#ffffff" opacity="0.8"/>
-        <circle cx="40" cy="200" r="5" fill="#ffffff" opacity="0.8"/>
-    </svg>
-</div>
+<!-- Injected Custom Corner Artwork -->
+<img src="data:image/jpeg;base64,{cb_base64}" class="corner-tl">
+<img src="data:image/jpeg;base64,{gt_base64}" class="corner-tr">
+<img src="data:image/jpeg;base64,{al_base64}" class="corner-br">
+<img src="data:image/jpeg;base64,{sm_base64}" class="corner-bl">
 """, unsafe_allow_html=True)
 
 # --- PASSWORD SECURITY SETUP ---
