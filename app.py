@@ -4,16 +4,19 @@ from google import genai
 import os
 import time
 
-# --- PAGE CONFIG & CUSTOM CALMING UI STYLING ---
+# --- PAGE CONFIG & CALMING BACKGROUND DESIGN ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
 st.markdown("""
 <style>
-    /* Calming background pattern and soft color palette */
-    .main { 
+    /* Calming background pattern across the entire viewport */
+    [data-testid="stAppViewContainer"] {
         background-color: #f4f6f9;
-        background-image: radial-gradient(#d0d7de 1px, transparent 1px);
-        background-size: 24px 24px;
+        background-image: radial-gradient(#cbd5e1 1.5px, transparent 1.5px);
+        background-size: 28px 28px;
+    }
+    [data-testid="stHeader"] {
+        background: rgba(0,0,0,0);
     }
     .stTabs [data-baseweb="tab-list"] { gap: 8px; }
     .stTabs [data-baseweb="tab"] {
@@ -56,7 +59,7 @@ st.markdown("Manage team research, track evidence URLs, organize collaborative t
 CSV_FILE = "research_log.csv"
 TODO_FILE = "todo_list.csv"
 
-# --- GUARANTEED BLANK INITIALIZATION ---
+# --- GUARANTEED BLANK START (Auto-clears old dummy rows) ---
 def load_research():
     expected_columns = ["id", "topic", "source", "summary", "researcher", "printed", "url"]
     if os.path.exists(CSV_FILE):
@@ -68,13 +71,16 @@ def load_research():
                         df[col] = False
                     else:
                         df[col] = ""
+            # If old dummy data was present, reset to completely blank
+            if not df.empty and ("Mock" in str(df.iloc[0].get("topic", "")) or "Example" in str(df.iloc[0].get("topic", ""))):
+                df = pd.DataFrame(columns=expected_columns)
+                df.to_csv(CSV_FILE, index=False)
             return df
         except Exception:
             df = pd.DataFrame(columns=expected_columns)
             df.to_csv(CSV_FILE, index=False)
             return df
     else:
-        # Starts 100% blank
         df = pd.DataFrame(columns=expected_columns)
         df.to_csv(CSV_FILE, index=False)
         return df
@@ -178,7 +184,6 @@ with tab2:
     with col_s1:
         search_query = st.text_input("🔍 Search logs (keywords in topic, source, summary, or researcher):", "")
     with col_s2:
-        # Non-typeable radio buttons for sorting
         sort_option = st.radio("Sort View By:", ["Default (ID Order)", "By Topic", "By Researcher", "By Source"], horizontal=True)
 
     filtered_df = df.copy()
@@ -312,7 +317,6 @@ with tab4:
                 current_assignee = row['assignee'] if pd.notna(row['assignee']) and str(row['assignee']).strip() != "" else "None"
                 st.markdown(f"*Worked on by:* **{current_assignee}**")
             with cols[1]:
-                # Only Open and In Progress status options
                 status_options = ["Open", "In Progress"]
                 current_status = row['status'] if row['status'] in status_options else "Open"
                 status_val = st.selectbox(f"Status {row['id']}", status_options, index=status_options.index(current_status), key=f"status_{row['id']}")
@@ -322,7 +326,6 @@ with tab4:
                     todo_df.to_csv(TODO_FILE, index=False)
                     st.rerun()
 
-                # Dynamically show name input box if status is "In Progress"
                 if status_val == "In Progress":
                     worker_name = st.text_input(f"Your Name (Who is working on ID {row['id']}):", value=str(row['assignee']) if pd.notna(row['assignee']) else "", key=f"worker_{row['id']}")
                     if worker_name != row['assignee']:
