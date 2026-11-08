@@ -1,0 +1,9 @@
+   [theme]
+   # Always use the light theme, even when the computer is in dark mode
+   base = "light"
+   # Purple for buttons and highlights
+   primaryColor = "#7a6e9d"
+   # Near-white backgrounds with a hint of pink
+   backgroundColor = "#ffffff"
+   secondaryBackgroundColor = "#fff5f8"
+   textColor = "#1e1d2b"
