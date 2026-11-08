@@ -5,7 +5,7 @@ import os
 import time
 import base64
 
-# --- PAGE CONFIG & CUSTOM SEASONAL CORNER ART DESIGN ---
+# --- PAGE CONFIG ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
 # Helper function to convert local images to base64 for reliable web rendering
@@ -16,119 +16,224 @@ def img_to_base64(file_path):
         return base64.b64encode(data).decode("utf-8")
     return ""
 
-cb_base64 = img_to_base64("image_ef6f1d.jpg")
-gt_base64 = img_to_base64("image_ef6f37.jpg")
-al_base64 = img_to_base64("image_ef72e1.jpg")
-sm_base64 = img_to_base64("image_ef729c.jpg")
+# Design helper: looks for a .png first (best, keeps transparency), then .jpg / .jpeg
+def corner_art(name, css_class):
+    for ext, mime in [(".png", "image/png"), (".jpg", "image/jpeg"), (".jpeg", "image/jpeg")]:
+        data = img_to_base64(name + ext)
+        if data:
+            extra = " art-jpg" if mime == "image/jpeg" else ""
+            return f'<img src="data:{mime};base64,{data}" class="art {css_class}{extra}">'
+    return ""
+
+art_html = (
+    corner_art("cherry_blossom", "art-tl")
+    + corner_art("green_tree", "art-tr")
+    + corner_art("snow", "art-snow")
+    + corner_art("snowman", "art-snowman")
+    + corner_art("autumn_leaves", "art-leaves")
+)
 
 st.markdown(f"""
 <style>
-    /* Clean calming background with soft center fade */
+    /* ---------- Colour palette ---------- */
+    :root {{
+        --lav-bg: #b2a9c7;
+        --lav-light: #ddd7e8;
+        --lav-panel: rgba(208, 200, 224, 0.88);
+        --lav-tab: #dcd6e6;
+        --lav-tab-active: #ece8f3;
+        --lav-border: #b6accb;
+        --purple-btn: #7a6e9d;
+        --purple-btn-hover: #65588a;
+        --ink: #1e1d2b;
+    }}
+
+    /* ---------- Lavender background with soft glowing centre ---------- */
     [data-testid="stAppViewContainer"] {{
-        background-color: #f4f6f9;
-        background-image: radial-gradient(circle at center, rgba(244, 246, 249, 1) 45%, rgba(220, 228, 236, 0.8) 100%);
+        background-color: var(--lav-bg);
+        background-image: radial-gradient(ellipse at 50% 40%, #e6e1ef 0%, #cfc7de 40%, var(--lav-bg) 100%);
     }}
     [data-testid="stHeader"] {{
         background: rgba(0,0,0,0);
     }}
-    
-    /* Narrow the main workspace container so art doesn't overlap text/tables */
-    [data-testid="stMainBlockContainer"] {{
-        max-width: 850px !important;
-        margin: 0 auto !important;
-        padding-left: 2rem !important;
-        padding-right: 2rem !important;
+
+    /* ---------- White picture-frame border around the whole page ---------- */
+    .page-frame {{
+        position: fixed;
+        inset: 10px;
+        border: 5px solid #ffffff;
+        border-radius: 6px;
+        box-shadow: 0 0 0 1px rgba(0,0,0,0.06), inset 0 0 0 1px rgba(0,0,0,0.04);
+        pointer-events: none;
+        z-index: 3;
     }}
 
-    .stTabs [data-baseweb="tab-list"] {{ gap: 8px; }}
-    .stTabs [data-baseweb="tab"] {{
-        height: 45px;
-        white-space: pre-wrap;
-        background-color: #ffffff;
-        border-radius: 8px 8px 0px 0px;
-        font-weight: 600;
-        color: #2c3e50;
-        border: 1px solid #cbd5e1;
+    /* ---------- Centre column (sits above the artwork) ---------- */
+    [data-testid="stMainBlockContainer"] {{
+        max-width: 640px !important;
+        margin: 0 auto !important;
+        padding-top: 3rem !important;
+        padding-left: 1rem !important;
+        padding-right: 1rem !important;
+        position: relative;
+        z-index: 2;
     }}
-    .stTabs [aria-selected="true"] {{
-        background-color: #2b6cb0 !important;
-        color: white !important;
+
+    /* ---------- Title + subtitle ---------- */
+    h1 {{
+        text-align: center;
+        color: var(--ink) !important;
+        font-weight: 700 !important;
+        font-size: 1.9rem !important;
+        padding-bottom: 0 !important;
+        margin-bottom: 0 !important;
     }}
-    div.stButton > button {{
+    [data-testid="stHeaderActionElements"] {{ display: none; }}
+    .subtitle {{
+        text-align: center;
+        color: #2c2a3a;
+        font-size: 1rem;
+        margin-top: -0.4rem;
+        margin-bottom: 1.6rem;
+    }}
+
+    /* ---------- Password card ---------- */
+    .st-key-pw_card {{
+        background: var(--lav-panel);
+        border: 1px solid var(--lav-border);
         border-radius: 6px;
-        font-weight: 600;
-        background-color: #2b6cb0;
-        color: white;
+        padding: 0.9rem 1.2rem 1.1rem 1.2rem;
+        margin: 0 auto 2.5rem auto;
+        max-width: 400px;
+        box-shadow: 0 2px 6px rgba(60, 50, 90, 0.10);
+    }}
+
+    /* ---------- Tabs panel ---------- */
+    .stTabs {{
+        background: var(--lav-panel);
+        border: 1px solid var(--lav-border);
+        border-radius: 4px;
+        box-shadow: 0 2px 8px rgba(60, 50, 90, 0.12);
+        overflow: hidden;
+    }}
+    .stTabs [data-baseweb="tab-list"] {{
+        gap: 0;
+        background: var(--lav-tab);
+        border-bottom: 1px solid var(--lav-border);
+    }}
+    .stTabs [data-baseweb="tab"] {{
+        height: 42px;
+        flex: 1 1 auto;
+        justify-content: center;
+        white-space: nowrap;
+        background-color: var(--lav-tab);
+        border-radius: 0;
+        border-right: 1px solid var(--lav-border);
+        padding: 0 0.8rem;
+        font-weight: 500;
+        color: var(--ink);
+    }}
+    .stTabs [data-baseweb="tab"]:last-child {{ border-right: none; }}
+    .stTabs [aria-selected="true"] {{
+        background-color: var(--lav-tab-active) !important;
+        color: var(--ink) !important;
+    }}
+    .stTabs [data-baseweb="tab-highlight"],
+    .stTabs [data-baseweb="tab-border"] {{
+        display: none;
+    }}
+    .stTabs [data-baseweb="tab-panel"] {{
+        padding: 1.1rem 1.1rem 1.4rem 1.1rem;
+        min-height: 380px;
+    }}
+
+    /* ---------- Text, labels, inputs ---------- */
+    [data-testid="stAppViewContainer"] p,
+    [data-testid="stAppViewContainer"] label,
+    [data-testid="stAppViewContainer"] h2,
+    [data-testid="stAppViewContainer"] h3 {{
+        color: var(--ink);
+    }}
+    [data-baseweb="input"], [data-baseweb="textarea"], [data-baseweb="select"] > div {{
+        background-color: #ffffff !important;
+        border: 1px solid #c9c1d9 !important;
+        border-radius: 4px !important;
+    }}
+    [data-baseweb="input"] input, [data-baseweb="textarea"] textarea {{
+        background-color: #ffffff !important;
+        color: var(--ink) !important;
+    }}
+
+    /* ---------- Buttons ---------- */
+    div.stButton > button,
+    div.stFormSubmitButton > button,
+    div.stDownloadButton > button {{
+        border-radius: 4px;
+        font-weight: 500;
+        background-color: var(--purple-btn);
+        color: #ffffff;
         border: none;
+        padding: 0.45rem 1.1rem;
+        box-shadow: 0 1px 3px rgba(40, 30, 70, 0.25);
     }}
-    div.stButton > button:hover {{
-        background-color: #2c5282;
-        color: white;
+    div.stButton > button:hover,
+    div.stFormSubmitButton > button:hover,
+    div.stDownloadButton > button:hover {{
+        background-color: var(--purple-btn-hover);
+        color: #ffffff;
     }}
-    
-    /* Custom Corner Art Layout & Sizing (Bottom elements made smaller) */
-    .corner-tl {{
+
+    /* Forms, expanders, tables blend into the lavender panel */
+    [data-testid="stForm"], [data-testid="stExpander"] details {{
+        background: rgba(255, 255, 255, 0.35);
+        border: 1px solid var(--lav-border) !important;
+        border-radius: 6px;
+    }}
+    hr {{ border-color: var(--lav-border) !important; }}
+
+    /* ---------- Seasonal artwork (behind the content) ---------- */
+    .art {{
         position: fixed;
-        top: 0;
-        left: 0;
-        width: 260px;
-        z-index: 99999;
         pointer-events: none;
-        opacity: 0.9;
-        mask-image: radial-gradient(circle at top left, black 35%, transparent 85%);
-        -webkit-mask-image: radial-gradient(circle at top left, black 35%, transparent 85%);
+        z-index: 1;
     }}
-    .corner-tr {{
-        position: fixed;
-        top: 0;
-        right: 0;
-        width: 260px;
-        z-index: 99999;
-        pointer-events: none;
-        opacity: 0.9;
-        mask-image: radial-gradient(circle at top right, black 35%, transparent 85%);
-        -webkit-mask-image: radial-gradient(circle at top right, black 35%, transparent 85%);
+    /* JPGs with a white background: blend the white away */
+    .art-jpg {{ mix-blend-mode: multiply; }}
+
+    .art-tl {{ top: 15px; left: 15px; width: 420px; }}
+    .art-tr {{ top: 15px; right: 15px; width: 340px; }}
+    .art-snow {{ bottom: 15px; left: 15px; width: 640px; }}
+    .art-snowman {{ bottom: 70px; left: 70px; width: 230px; }}
+    .art-leaves {{ bottom: 15px; right: 15px; width: 560px; }}
+
+    /* Smaller screens: shrink the art so it doesn't crowd the content */
+    @media (max-width: 1100px) {{
+        .art-tl {{ width: 260px; }}
+        .art-tr {{ width: 220px; }}
+        .art-snow {{ width: 380px; }}
+        .art-snowman {{ width: 140px; bottom: 45px; left: 40px; }}
+        .art-leaves {{ width: 340px; }}
     }}
-    .corner-br {{
-        position: fixed;
-        bottom: 0;
-        right: 0;
-        width: 190px;
-        z-index: 99999;
-        pointer-events: none;
-        opacity: 0.9;
-        mask-image: radial-gradient(circle at bottom right, black 35%, transparent 85%);
-        -webkit-mask-image: radial-gradient(circle at bottom right, black 35%, transparent 85%);
-    }}
-    .corner-bl {{
-        position: fixed;
-        bottom: 0;
-        left: 0;
-        width: 175px;
-        z-index: 99999;
-        pointer-events: none;
-        opacity: 0.9;
-        mask-image: radial-gradient(circle at bottom left, black 35%, transparent 85%);
-        -webkit-mask-image: radial-gradient(circle at bottom left, black 35%, transparent 85%);
+    @media (max-width: 700px) {{
+        .art {{ opacity: 0.35; }}
     }}
 </style>
 
-<!-- Injected Custom Corner Artwork -->
-<img src="data:image/jpeg;base64,{cb_base64}" class="corner-tl">
-<img src="data:image/jpeg;base64,{gt_base64}" class="corner-tr">
-<img src="data:image/jpeg;base64,{al_base64}" class="corner-br">
-<img src="data:image/jpeg;base64,{sm_base64}" class="corner-bl">
+<div class="page-frame"></div>
+{art_html}
 """, unsafe_allow_html=True)
+
+# --- TITLE ---
+st.title("Data tracker for English debate")
+st.markdown('<div class="subtitle">Manage team research for upcoming English debates</div>', unsafe_allow_html=True)
 
 # --- PASSWORD SECURITY SETUP ---
 if "APP_PASSWORD" in st.secrets:
-    password = st.text_input("🔒 Enter Password to Access Data tracker for English debate:", type="password")
+    with st.container(key="pw_card"):
+        password = st.text_input("🔒 Enter Password to Access Data tracker for English debate:", type="password")
     if password != st.secrets["APP_PASSWORD"]:
         st.warning("Please enter the correct password to access this private debate research tracker.")
         st.stop()
-
-st.title("📊 Data tracker for English debate")
-st.markdown("Manage team research, track evidence URLs, organize collaborative to-do queues, and query your database with Gemini AI.")
 
 CSV_FILE = "research_log.csv"
 TODO_FILE = "todo_list.csv"
@@ -190,16 +295,15 @@ if "prefill_summary" not in st.session_state:
 
 # --- TAB NAVIGATION ---
 tab1, tab2, tab3, tab4 = st.tabs([
-    "🔍 Query AI", 
-    "📋 View, Edit & Log", 
-    "➕ Add New Research", 
+    "🔍 Query AI",
+    "📋 View, Edit & Log",
+    "➕ Add New Research",
     "✅ Research To-Do Queue"
 ])
 
 # ================= TAB 1: QUERY AI =================
 with tab1:
-    st.subheader("Ask AI about Team Research")
-    user_question = st.text_input("Enter your research question:")
+    user_question = st.text_input("Enter your research question:", placeholder="Enter your research question:")
     if st.button("Ask AI Assistant"):
         if user_question:
             api_key = None
@@ -208,7 +312,7 @@ with tab1:
                     api_key = st.secrets["GEMINI_API_KEY"]
             except Exception:
                 pass
-            
+
             if not api_key:
                 api_key = os.environ.get("GEMINI_API_KEY")
 
@@ -237,10 +341,10 @@ with tab1:
                                     model='gemini-3.5-flash-lite',
                                     contents=prompt
                                 )
-                                break 
+                                break
                             except Exception as inner_e:
                                 if attempt == max_retries - 1:
-                                    raise inner_e 
+                                    raise inner_e
                                 time.sleep(2)
 
                         if response:
@@ -252,10 +356,13 @@ with tab1:
         else:
             st.warning("Please enter a question first.")
 
+    st.divider()
+    st.markdown("Search Results:")
+
 # ================= TAB 2: VIEW, EDIT & LOG =================
 with tab2:
     st.subheader("Current Research Database & Evidence")
-    
+
     col_s1, col_s2 = st.columns([2, 1])
     with col_s1:
         search_query = st.text_input("🔍 Search logs (keywords in topic, source, summary, or researcher):", "")
@@ -283,8 +390,8 @@ with tab2:
     st.info("💡 You can edit cells, check/uncheck 'printed' boxes, or delete rows directly in the table below!")
 
     edited_df = st.data_editor(
-        filtered_df, 
-        num_rows="dynamic", 
+        filtered_df,
+        num_rows="dynamic",
         key="research_editor",
         use_container_width=True
     )
@@ -324,7 +431,7 @@ with tab2:
 # ================= TAB 3: ADD NEW RESEARCH =================
 with tab3:
     st.subheader("Add New Research Entry")
-    
+
     with st.form("add_research_form", clear_on_submit=True):
         new_topic = st.text_input("Debate Topic")
         new_researcher = st.text_input("Researcher Name")
@@ -334,16 +441,16 @@ with tab3:
         new_summary = st.text_area("Key Summary / Arguments", value=prefill)
         new_url = st.text_input("Source URL / Evidence Link (Optional)")
         new_printed = st.checkbox("Printed out already?")
-        
+
         submit_button = st.form_submit_button("Save to Database")
 
         if submit_button:
             if new_topic and new_source and new_summary and new_researcher:
                 new_id = int(df["id"].max()) + 1 if not df.empty and "id" in df.columns and pd.notna(df["id"].max()) else 1
                 new_row = {
-                    "id": new_id, 
-                    "topic": new_topic, 
-                    "source": new_source, 
+                    "id": new_id,
+                    "topic": new_topic,
+                    "source": new_source,
                     "summary": new_summary,
                     "researcher": new_researcher,
                     "printed": bool(new_printed),
@@ -396,7 +503,7 @@ with tab4:
                 status_options = ["Open", "In Progress"]
                 current_status = row['status'] if row['status'] in status_options else "Open"
                 status_val = st.selectbox(f"Status {row['id']}", status_options, index=status_options.index(current_status), key=f"status_{row['id']}")
-                
+
                 if status_val != row['status']:
                     todo_df.at[idx, 'status'] = status_val
                     todo_df.to_csv(TODO_FILE, index=False)
