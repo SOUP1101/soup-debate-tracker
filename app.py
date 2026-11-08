@@ -474,19 +474,6 @@ with tab2:
         df.to_csv(CSV_FILE, index=False)
         st.success("Database updated successfully!")
 
-    with st.expander("🔗 View Source URLs & Evidence Links"):
-        if not df.empty:
-            for idx, row in df.iterrows():
-                url_val = row.get("url", "")
-                if pd.notna(url_val) and str(url_val).strip() != "":
-                    st.markdown(f"**[ID {row['id']}] {row['topic']}** — *{row['source']}*")
-                    st.markdown(f"🔗 [Open Source Link]({url_val})")
-                    st.divider()
-                else:
-                    st.markdown(f"**[ID {row['id']}] {row['topic']}** — *No URL provided*")
-        else:
-            st.write("No research entries yet.")
-
     if not df.empty:
         csv_data = df.to_csv(index=False).encode('utf-8-sig')
         st.download_button(
@@ -500,10 +487,34 @@ with tab2:
 with tab3:
     st.subheader("Add New Research Entry")
 
+    # Box that lets you type something new OR pick an answer that was saved before.
+    # Saved answers come from the research database, so every answer you save
+    # with "Save to Database" shows up as an option next time.
+    def remember_box(label, column, key):
+        saved_answers = []
+        if column in df.columns:
+            for value in df[column].dropna():
+                text = str(value).strip()
+                if text and text.lower() != "nan" and text not in saved_answers:
+                    saved_answers.append(text)
+        saved_answers.sort(key=str.lower)
+        try:
+            return st.selectbox(
+                label,
+                saved_answers,
+                index=None,
+                placeholder="Type something new, or choose a saved answer",
+                accept_new_options=True,
+                key=key,
+            )
+        except TypeError:
+            # Older Streamlit versions can't do this, so fall back to a normal box
+            return st.text_input(label, key=key)
+
     with st.form("add_research_form", clear_on_submit=True):
-        new_topic = st.text_input("Debate Topic")
-        new_researcher = st.text_input("Researcher Name")
-        new_source = st.text_input("Source / Citation")
+        new_topic = remember_box("Debate Topic", "topic", "pick_topic")
+        new_researcher = remember_box("Researcher Name", "researcher", "pick_researcher")
+        new_source = remember_box("Source / Citation", "source", "pick_source")
 
         prefill = st.session_state.get("prefill_summary", "")
         new_summary = st.text_area("Key Summary / Arguments", value=prefill)
