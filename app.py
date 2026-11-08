@@ -71,7 +71,6 @@ def load_research():
                         df[col] = False
                     else:
                         df[col] = ""
-            # If old dummy data was present, reset to completely blank
             if not df.empty and ("Mock" in str(df.iloc[0].get("topic", "")) or "Example" in str(df.iloc[0].get("topic", ""))):
                 df = pd.DataFrame(columns=expected_columns)
                 df.to_csv(CSV_FILE, index=False)
@@ -93,13 +92,20 @@ def load_todo():
             for col in expected_todo_cols:
                 if col not in df.columns:
                     df[col] = "Open" if col == "status" else ""
+            # Ensure text compatibility to prevent type errors
+            df["assignee"] = df["assignee"].astype(str)
+            df["status"] = df["status"].astype(str)
             return df
         except Exception:
             df = pd.DataFrame(columns=expected_todo_cols)
+            df["assignee"] = df["assignee"].astype(str)
+            df["status"] = df["status"].astype(str)
             df.to_csv(TODO_FILE, index=False)
             return df
     else:
         df = pd.DataFrame(columns=expected_todo_cols)
+        df["assignee"] = df["assignee"].astype(str)
+        df["status"] = df["status"].astype(str)
         df.to_csv(TODO_FILE, index=False)
         return df
 
@@ -314,7 +320,7 @@ with tab4:
             cols = st.columns([3, 2, 2])
             with cols[0]:
                 st.markdown(f"**Claim:** {row['claim']}")
-                current_assignee = row['assignee'] if pd.notna(row['assignee']) and str(row['assignee']).strip() != "" else "None"
+                current_assignee = row['assignee'] if pd.notna(row['assignee']) and str(row['assignee']).strip() != "" and str(row['assignee']) != "nan" else "None"
                 st.markdown(f"*Worked on by:* **{current_assignee}**")
             with cols[1]:
                 status_options = ["Open", "In Progress"]
@@ -327,9 +333,10 @@ with tab4:
                     st.rerun()
 
                 if status_val == "In Progress":
-                    worker_name = st.text_input(f"Your Name (Who is working on ID {row['id']}):", value=str(row['assignee']) if pd.notna(row['assignee']) else "", key=f"worker_{row['id']}")
-                    if worker_name != row['assignee']:
-                        todo_df.at[idx, 'assignee'] = worker_name
+                    existing_assignee = str(row['assignee']) if pd.notna(row['assignee']) and str(row['assignee']) != "nan" else ""
+                    worker_name = st.text_input(f"Your Name (Who is working on ID {row['id']}):", value=existing_assignee, key=f"worker_{row['id']}")
+                    if worker_name != existing_assignee:
+                        todo_df.at[idx, 'assignee'] = str(worker_name)
                         todo_df.to_csv(TODO_FILE, index=False)
             with cols[2]:
                 if st.button(f"🚀 Move to Add & Complete", key=f"move_{row['id']}"):
