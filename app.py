@@ -22,16 +22,44 @@ def img_to_base64(file_path):
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
 IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
 
+# Backup: if a picture was saved with a random name (like "af86fef8-....png"),
+# recognise it by its exact size in pixels instead.
+ART_SIZES = {
+    "snowman": (333, 437),
+    "snow": (833, 193),
+    "autumn_leaves": (1000, 561),
+    "cherry_blossom": (390, 390),
+    "green_tree": (390, 243),
+}
+
+def png_size(file_path):
+    try:
+        with open(file_path, "rb") as f:
+            header = f.read(24)
+        if header[:8] == b"\x89PNG\r\n\x1a\n":
+            return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
+    except Exception:
+        pass
+    return None
+
 def find_art(name):
     wanted = name.lower().replace("_", "").replace("-", "").replace(" ", "")
+    by_size = None
     for folder, _, files in os.walk(APP_DIR):
         for file_name in files:
             stem, ext = os.path.splitext(file_name)
+            if ext.lower() not in IMAGE_TYPES:
+                continue
+            path = os.path.join(folder, file_name)
             clean = stem.lower().replace("_", "").replace("-", "").replace(" ", "")
-            if clean == wanted and ext.lower() in IMAGE_TYPES:
-                data = img_to_base64(os.path.join(folder, file_name))
+            if clean == wanted:
+                data = img_to_base64(path)
                 if data:
                     return f"url('data:{IMAGE_TYPES[ext.lower()]};base64,{data}')"
+            elif by_size is None and ext.lower() == ".png" and png_size(path) == ART_SIZES.get(name):
+                by_size = path
+    if by_size:
+        return f"url('data:image/png;base64,{img_to_base64(by_size)}')"
     return None
 
 ART_NAMES = ["snowman", "snow", "autumn_leaves", "cherry_blossom", "green_tree"]
