@@ -8,88 +8,129 @@ import base64
 # --- PAGE CONFIG ---
 st.set_page_config(page_title="Data tracker for English debate", page_icon="📊", layout="wide")
 
-# Helper function to convert local images to base64 for reliable web rendering
-def img_to_base64(file_path):
-    if os.path.exists(file_path):
-        with open(file_path, "rb") as f:
-            data = f.read()
-        return base64.b64encode(data).decode("utf-8")
-    return ""
+# =====================================================================
+# --- DESIGN: soft painted seasonal corners ---
+# Clockwise from the top-left: spring (cherry blossom), summer (green tree),
+# autumn (falling leaves), winter (snowy pine branch with pinecones).
+# Each picture is placed on a soft lavender backdrop, given the same colour
+# mood, kept sharp in its corner, and blurred + faded smoothly towards the centre.
+# Pictures are found by name OR by their exact size, so random file names are fine.
+# =====================================================================
+import io
+import numpy as np
+from PIL import Image, ImageOps, ImageEnhance, ImageFilter
 
-# --- DESIGN: find the artwork files ---
-# Looks in the folder where app.py lives (and any subfolders like "images"),
-# ignores upper/lower case, and accepts .png, .jpg, .jpeg or .webp.
 APP_DIR = os.path.dirname(os.path.abspath(__file__))
-IMAGE_TYPES = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg", ".webp": "image/webp"}
+PICTURE_TYPES = (".png", ".jpg", ".jpeg", ".webp")
 
-# Backup: if a picture was saved with a random name (like "af86fef8-....png"),
-# recognise it by its exact size in pixels instead.
-ART_SIZES = {
-    "snowman": (333, 437),
-    "snow": (833, 193),
-    "autumn_leaves": (1000, 561),
-    "cherry_blossom": (390, 390),
-    "green_tree": (390, 243),
+#            season:  (file name,       exact size,   corner,         width share, mirror?)
+SEASON_ART = {
+    "spring": ("cherry_blossom", (390, 390),  "top-left",     0.98, True),
+    "summer": ("green_tree",     (390, 243),  "top-right",    0.94, False),
+    "autumn": ("autumn_leaves",  (1000, 561), "bottom-right", 1.00, False),
+    "winter": ("winter",         (760, 640),  "bottom-left",  1.00, False),
 }
 
-def png_size(file_path):
-    try:
-        with open(file_path, "rb") as f:
-            header = f.read(24)
-        if header[:8] == b"\x89PNG\r\n\x1a\n":
-            return int.from_bytes(header[16:20], "big"), int.from_bytes(header[20:24], "big")
-    except Exception:
-        pass
-    return None
 
-# Pictures that should be mirrored left-to-right so they grow out of their corner
-FLIP_ART = {"cherry_blossom"}
-
-def art_url(path, name):
-    # Trim empty transparent space (so cut edges touch the page frame) and flip if needed
-    try:
-        from PIL import Image, ImageOps
-        import io
-        img = Image.open(path).convert("RGBA")
-        box = img.getchannel("A").getbbox()
-        if box:
-            img = img.crop(box)
-        if name in FLIP_ART:
-            img = ImageOps.mirror(img)
-        buffer = io.BytesIO()
-        img.save(buffer, format="PNG")
-        data = base64.b64encode(buffer.getvalue()).decode("utf-8")
-        return f"url('data:image/png;base64,{data}')"
-    except Exception:
-        ext = os.path.splitext(path)[1].lower()
-        return f"url('data:{IMAGE_TYPES.get(ext, 'image/png')};base64,{img_to_base64(path)}')"
-
-def find_art(name):
-    wanted = name.lower().replace("_", "").replace("-", "").replace(" ", "")
+def find_picture(name, size):
+    wanted = name.replace("_", "").lower()
     by_size = None
     for folder, _, files in os.walk(APP_DIR):
-        for file_name in files:
+        for file_name in sorted(files):
             stem, ext = os.path.splitext(file_name)
-            if ext.lower() not in IMAGE_TYPES:
+            if ext.lower() not in PICTURE_TYPES:
                 continue
             path = os.path.join(folder, file_name)
-            clean = stem.lower().replace("_", "").replace("-", "").replace(" ", "")
-            if clean == wanted:
-                return art_url(path, name)
-            elif by_size is None and ext.lower() == ".png" and png_size(path) == ART_SIZES.get(name):
-                by_size = path
-    if by_size:
-        return art_url(by_size, name)
-    return None
+            if stem.replace("_", "").replace("-", "").replace(" ", "").lower() == wanted:
+                return path
+            if by_size is None:
+                try:
+                    with Image.open(path) as im:
+                        if im.size == size:
+                            by_size = path
+                except Exception:
+                    pass
+    return by_size
 
-ART_NAMES = ["snowman", "snow", "autumn_leaves", "cherry_blossom", "green_tree"]
-art = {name: find_art(name) for name in ART_NAMES}
-missing_art = [name for name, url in art.items() if url is None]
 
-# Each picture becomes a background layer of the page (first = on top).
-# Missing pictures are replaced by a transparent layer so the layout stays the same.
-EMPTY = "linear-gradient(transparent, transparent)"
-art_layers = ", ".join(art[name] or EMPTY for name in ART_NAMES)
+def smoothstep(edge0, edge1, x):
+    t = np.clip((x - edge0) / (edge1 - edge0), 0, 1)
+    return t * t * (3 - 2 * t)
+
+
+@st.cache_data(show_spinner=False)
+def painted_corner(path, corner, width_share, mirror, changed_time):
+    size = 820
+    # 1) Place the picture in its corner on a soft lavender backdrop
+    pic = Image.open(path).convert("RGBA")
+    box = pic.getchannel("A").getbbox()
+    if box:
+        pic = pic.crop(box)
+    if mirror:
+        pic = ImageOps.mirror(pic)
+    w = int(size * width_share)
+    h = int(pic.height * w / pic.width)
+    if h > size:
+        w, h = int(w * size / h), size
+    pic = pic.resize((w, h), Image.LANCZOS)
+    canvas = Image.new("RGBA", (size, size), (203, 195, 220, 255))
+    px = 0 if "left" in corner else size - w
+    py = 0 if "top" in corner else size - h
+    canvas.alpha_composite(pic, (px, py))
+    img = canvas.convert("RGB")
+
+    # 2) Same colour mood for every season: softer colours, lavender-tinted shadows, gentle glow
+    img = ImageEnhance.Color(img).enhance(0.9)
+    img = ImageEnhance.Contrast(img).enhance(0.94)
+    rgb = np.asarray(img).astype(np.float32) / 255.0
+    lavender = np.array([0.70, 0.66, 0.78], dtype=np.float32)
+    lum = rgb.mean(axis=2, keepdims=True)
+    rgb = rgb + (lavender - rgb) * (0.22 * (1 - lum) + 0.06)
+    glow = np.asarray(img.filter(ImageFilter.GaussianBlur(14))).astype(np.float32) / 255.0
+    rgb = 1 - (1 - rgb) * (1 - 0.16 * glow)
+
+    # 3) Distance from the page corner (0 = corner, 1 = inner edge)
+    y, x = np.mgrid[0:size, 0:size].astype(np.float32) / (size - 1)
+    u = x if "left" in corner else 1 - x
+    v = y if "top" in corner else 1 - y
+
+    # 4) Soft, slightly uneven fade so it melts into the page
+    rng = np.random.default_rng(7)
+    small = Image.fromarray((rng.random((10, 10)) * 255).astype(np.uint8))
+    wobble = (np.asarray(small.resize((size, size), Image.BICUBIC)).astype(np.float32) / 255.0 - 0.5) * 0.16
+    u2, v2 = u + wobble, v + wobble
+    alpha = (1 - smoothstep(0.42, 1.0, u2)) * (1 - smoothstep(0.42, 1.0, v2))
+    alpha *= 1 - smoothstep(0.7, 1.28, np.sqrt(u2 ** 2 + v2 ** 2))
+
+    # 5) Depth: sharp in the corner, dreamy blur where it fades out
+    blurred = np.asarray(Image.fromarray((rgb * 255).astype(np.uint8)).filter(ImageFilter.GaussianBlur(7))).astype(np.float32) / 255.0
+    sharp_amount = np.clip(alpha * 1.7, 0, 1)[..., None]
+    rgb = rgb * sharp_amount + blurred * (1 - sharp_amount)
+
+    out = Image.fromarray((np.dstack([rgb, alpha]).clip(0, 1) * 255).astype(np.uint8), "RGBA")
+    buffer = io.BytesIO()
+    try:
+        out.save(buffer, format="WEBP", quality=86, method=4)
+        mime = "image/webp"
+    except Exception:
+        buffer = io.BytesIO()
+        out.save(buffer, format="PNG", optimize=True)
+        mime = "image/png"
+    return f"url('data:{mime};base64,{base64.b64encode(buffer.getvalue()).decode('utf-8')}')"
+
+
+art = {}
+missing_photos = []
+for season, (name, exact_size, corner, width_share, mirror) in SEASON_ART.items():
+    picture = find_picture(name, exact_size)
+    if picture:
+        art[season] = painted_corner(picture, corner, width_share, mirror, os.path.getmtime(picture))
+    else:
+        art[season] = "linear-gradient(transparent, transparent)"
+        missing_photos.append(name)
+
+# Background layers: spring (top-left), summer (top-right), autumn (bottom-right), winter (bottom-left)
+art_layers = ", ".join([art["spring"], art["summer"], art["autumn"], art["winter"]])
 
 st.markdown(f"""
 <style>
@@ -106,49 +147,30 @@ st.markdown(f"""
         --ink: #1e1d2b;
     }}
 
-    /* ---------- Lavender background with soft glowing centre ---------- */
-    /* Order of layers: snowman, snow, autumn leaves, cherry blossom, green tree, gradient */
+    /* ---------- Lavender background with the four seasons in the corners ---------- */
+    /* Clockwise from top-left: spring, summer, autumn, winter */
     [data-testid="stAppViewContainer"] {{
         background-color: var(--lav-bg);
         background-image:
             {art_layers},
-            radial-gradient(ellipse at 50% 40%, #e6e1ef 0%, #cfc7de 40%, var(--lav-bg) 100%);
+            radial-gradient(ellipse at 50% 45%, #ece8f3 0%, #d6cfe3 45%, var(--lav-bg) 100%);
         background-repeat: no-repeat;
         background-attachment: fixed;
         background-position:
-            left 70px bottom 70px,
-            left 15px bottom 15px,
-            right 15px bottom 15px,
             left 15px top 15px,
             right 15px top 15px,
+            right 15px bottom 15px,
+            left 15px bottom 15px,
             center;
         background-size:
-            230px auto,
-            640px auto,
-            560px auto,
-            420px auto,
-            340px auto,
+            var(--art-size) var(--art-size),
+            var(--art-size) var(--art-size),
+            var(--art-size) var(--art-size),
+            var(--art-size) var(--art-size),
             cover;
     }}
-    /* Smaller screens: shrink the art so it doesn't crowd the content */
-    @media (max-width: 1300px) {{
-        [data-testid="stAppViewContainer"] {{
-            background-position:
-                left 40px bottom 45px,
-                left 15px bottom 15px,
-                right 15px bottom 15px,
-                left 15px top 15px,
-                right 15px top 15px,
-                center;
-            background-size:
-                150px auto,
-                400px auto,
-                360px auto,
-                270px auto,
-                230px auto,
-                cover;
-        }}
-    }}
+    /* Each corner picture grows with the screen but never gets too big */
+    :root {{ --art-size: min(42vw, 66vh, 640px); }}
     [data-testid="stHeader"] {{
         background: rgba(0,0,0,0);
     }}
@@ -173,6 +195,7 @@ st.markdown(f"""
         padding-right: 1rem !important;
         position: relative;
         z-index: 2;
+        background: radial-gradient(closest-side, rgba(238, 234, 245, 0.82) 0%, rgba(238, 234, 245, 0.7) 72%, rgba(238, 234, 245, 0) 100%);
     }}
 
     /* ---------- Title + subtitle ---------- */
@@ -287,9 +310,9 @@ st.markdown(f"""
 <div class="page-frame"></div>
 """, unsafe_allow_html=True)
 
-# Tells you which picture files couldn't be found (disappears once they're all there)
-if missing_art:
-    st.caption("🖼️ Picture files not found next to app.py: " + ", ".join(missing_art))
+# Shows which pictures are still missing (disappears once all four are there)
+if missing_photos:
+    st.caption("🖼️ Pictures not found next to app.py: " + ", ".join(missing_photos))
 
 # --- TITLE ---
 st.title("Data tracker for English debate")
